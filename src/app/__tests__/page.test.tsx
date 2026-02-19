@@ -30,6 +30,13 @@ describe("Home page", () => {
     expect(screen.getByText(/upload resume/i)).toBeInTheDocument();
   });
 
+  it("renders tone selector with all options", () => {
+    render(<Home />);
+    expect(screen.getByText("Professional")).toBeInTheDocument();
+    expect(screen.getByText("Friendly")).toBeInTheDocument();
+    expect(screen.getByText("Concise")).toBeInTheDocument();
+  });
+
   it("generate button is disabled when inputs are incomplete", () => {
     render(<Home />);
     const generateBtn = screen.getByRole("button", {

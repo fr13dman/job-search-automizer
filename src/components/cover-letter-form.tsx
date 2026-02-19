@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { JobInput } from "@/components/job-input";
 import { ResumeUpload } from "@/components/resume-upload";
+import { ToneSelector } from "@/components/tone-selector";
 import { CoverLetterOutput } from "@/components/cover-letter-output";
 import { ExportToolbar } from "@/components/export-toolbar";
+import type { Tone } from "@/types";
 
 export function CoverLetterForm() {
   const [jobDescription, setJobDescription] = useState("");
   const [resumeText, setResumeText] = useState("");
+  const [tone, setTone] = useState<Tone>("professional");
   const [outputText, setOutputText] = useState("");
 
   const { completion, isLoading, complete, error } = useCompletion({
@@ -31,11 +34,12 @@ export function CoverLetterForm() {
     console.log("[CoverLetterForm] Starting generation", {
       jobDescriptionLength: jobDescription.length,
       resumeTextLength: resumeText.length,
+      tone,
     });
     setOutputText("");
     try {
       await complete("", {
-        body: { resumeText, jobDescription },
+        body: { resumeText, jobDescription, tone },
       });
     } catch (err) {
       console.error("[CoverLetterForm] complete() threw:", err);
@@ -54,6 +58,8 @@ export function CoverLetterForm() {
           <JobInput onJobDescription={setJobDescription} />
           <Separator />
           <ResumeUpload onResumeText={setResumeText} />
+          <Separator />
+          <ToneSelector value={tone} onChange={setTone} />
           <Separator />
           <Button
             onClick={handleGenerate}
@@ -77,6 +83,7 @@ export function CoverLetterForm() {
             <CardTitle>Output</CardTitle>
             <ExportToolbar
               text={outputText || completion}
+              jobDescription={jobDescription}
               isLoading={isLoading}
             />
           </div>

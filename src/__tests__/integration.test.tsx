@@ -168,7 +168,8 @@ describe("Integration tests", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("stream interruption: partial text remains editable and exportable", () => {
+  it("stream interruption: partial text remains visible and exportable", async () => {
+    const user = userEvent.setup();
     // Simulate partial completion with error
     mockCompletion = "Dear Hiring Manager, I am writing to";
     mockIsLoading = false;
@@ -176,10 +177,9 @@ describe("Integration tests", () => {
 
     render(<Home />);
 
-    // The partial text should be in the output
-    const textarea = screen.getByLabelText(/cover letter/i);
-    expect(textarea).toHaveValue("Dear Hiring Manager, I am writing to");
-    expect(textarea).not.toHaveAttribute("readonly");
+    // The partial text should be in the rich preview
+    const preview = screen.getByTestId("rich-preview");
+    expect(preview.textContent).toContain("Dear Hiring Manager, I am writing to");
 
     // Export buttons should be enabled (not loading)
     expect(
@@ -188,5 +188,11 @@ describe("Integration tests", () => {
     expect(
       screen.getByRole("button", { name: /download pdf/i })
     ).not.toBeDisabled();
+
+    // User can click Edit to get textarea for editing
+    await user.click(screen.getByText("Edit"));
+    const textarea = screen.getByLabelText(/cover letter/i);
+    expect(textarea).toHaveValue("Dear Hiring Manager, I am writing to");
+    expect(textarea).not.toHaveAttribute("readonly");
   });
 });

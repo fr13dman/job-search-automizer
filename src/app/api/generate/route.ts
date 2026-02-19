@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { buildPrompt } from "@/lib/prompt";
+import { TONE_OPTIONS, type Tone } from "@/types";
+
+const VALID_TONES = new Set(TONE_OPTIONS.map((t) => t.value));
 
 export async function POST(request: NextRequest) {
   try {
-    const { resumeText, jobDescription } = await request.json();
+    const { resumeText, jobDescription, tone = "professional" } = await request.json();
 
     console.log("[/api/generate] Received request", {
       resumeTextLength: resumeText?.length ?? 0,
       jobDescriptionLength: jobDescription?.length ?? 0,
+      tone,
     });
 
     if (!resumeText || !jobDescription) {
@@ -20,9 +24,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { system, user } = buildPrompt(resumeText, jobDescription);
+    const safeTone: Tone = VALID_TONES.has(tone) ? tone : "professional";
+    const { system, user } = buildPrompt(resumeText, jobDescription, safeTone);
 
-    console.log("[/api/generate] Calling streamText with Claude Sonnet");
+    console.log("[/api/generate] Calling streamText with Claude Sonnet, tone:", safeTone);
 
     const result = streamText({
       model: anthropic("claude-sonnet-4-5-20250929"),

@@ -6,7 +6,7 @@ import { CoverLetterOutput } from "@/components/cover-letter-output";
 describe("CoverLetterOutput", () => {
   const onTextChange = vi.fn();
 
-  it("displays streaming text while loading", () => {
+  it("displays streaming text in textarea while loading", () => {
     render(
       <CoverLetterOutput
         completion="Dear Hiring Manager,"
@@ -32,7 +32,7 @@ describe("CoverLetterOutput", () => {
     ).toBeInTheDocument();
   });
 
-  it("switches to editable mode when loading completes", () => {
+  it("shows rich preview with monospace font when loading completes", () => {
     const { rerender } = render(
       <CoverLetterOutput
         completion="Full letter text"
@@ -49,11 +49,34 @@ describe("CoverLetterOutput", () => {
       />
     );
 
-    const textarea = screen.getByLabelText(/cover letter/i);
-    expect(textarea).not.toHaveAttribute("readonly");
+    const preview = screen.getByTestId("rich-preview");
+    expect(preview).toBeInTheDocument();
+    expect(preview.className).toContain("font-mono");
   });
 
-  it("allows user to modify text after generation", async () => {
+  it("renders bold markdown as highlighted text in preview", () => {
+    const { rerender } = render(
+      <CoverLetterOutput
+        completion="I **increased revenue by 40%** at my last role."
+        isLoading={true}
+        onTextChange={onTextChange}
+      />
+    );
+
+    rerender(
+      <CoverLetterOutput
+        completion="I **increased revenue by 40%** at my last role."
+        isLoading={false}
+        onTextChange={onTextChange}
+      />
+    );
+
+    const mark = screen.getByText("increased revenue by 40%");
+    expect(mark.tagName).toBe("MARK");
+    expect(mark.className).toContain("font-bold");
+  });
+
+  it("switches to raw editor when Edit button is clicked", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
       <CoverLetterOutput
@@ -71,6 +94,31 @@ describe("CoverLetterOutput", () => {
       />
     );
 
+    await user.click(screen.getByText("Edit"));
+    const textarea = screen.getByLabelText(/cover letter/i);
+    expect(textarea).toBeInTheDocument();
+    expect(textarea).not.toHaveAttribute("readonly");
+  });
+
+  it("allows user to modify text in raw editor and notifies parent", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <CoverLetterOutput
+        completion="Original"
+        isLoading={true}
+        onTextChange={onTextChange}
+      />
+    );
+
+    rerender(
+      <CoverLetterOutput
+        completion="Original"
+        isLoading={false}
+        onTextChange={onTextChange}
+      />
+    );
+
+    await user.click(screen.getByText("Edit"));
     const textarea = screen.getByLabelText(/cover letter/i);
     await user.clear(textarea);
     await user.type(textarea, "Edited");

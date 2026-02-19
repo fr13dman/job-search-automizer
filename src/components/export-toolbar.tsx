@@ -3,18 +3,24 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { downloadPdf } from "@/lib/generate-pdf";
+import { extractMetadata, buildPdfFilename } from "@/lib/extract-metadata";
 
 interface ExportToolbarProps {
   text: string;
+  jobDescription: string;
   isLoading: boolean;
 }
 
-export function ExportToolbar({ text, isLoading }: ExportToolbarProps) {
+function stripMarkdownBold(text: string): string {
+  return text.replace(/\*\*([^*]+)\*\*/g, "$1");
+}
+
+export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbarProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(stripMarkdownBold(text));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -23,7 +29,10 @@ export function ExportToolbar({ text, isLoading }: ExportToolbarProps) {
   }
 
   function handleDownloadPdf() {
-    downloadPdf(text);
+    const metadata = extractMetadata(text, jobDescription);
+    const filename = buildPdfFilename(metadata);
+    console.log("[ExportToolbar] PDF metadata:", metadata, "filename:", filename);
+    downloadPdf(text, metadata, filename);
   }
 
   return (
