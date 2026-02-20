@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 interface JobInputProps {
   onJobDescription: (text: string) => void;
@@ -39,15 +40,18 @@ export function JobInput({ onJobDescription }: JobInputProps) {
         setSuccess(true);
         setPreview(data.jobDescription.slice(0, 200) + "...");
         onJobDescription(data.jobDescription);
+        toast.success("Job description loaded successfully");
       } else {
         console.warn("[JobInput] Scrape failed:", data.error);
         setError(data.error || "Failed to scrape job posting");
         setShowManual(true);
+        toast.error("Failed to scrape job posting");
       }
     } catch (err) {
       console.error("[JobInput] Fetch error:", err);
       setError("Failed to fetch job posting");
       setShowManual(true);
+      toast.error("Failed to fetch job posting");
     } finally {
       setLoading(false);
     }
@@ -58,6 +62,7 @@ export function JobInput({ onJobDescription }: JobInputProps) {
       onJobDescription(manualText.trim());
       setSuccess(true);
       setPreview(manualText.trim().slice(0, 200) + "...");
+      toast.success("Job description loaded successfully");
     }
   }
 

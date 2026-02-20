@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 interface ResumeUploadProps {
   onResumeText: (text: string) => void;
@@ -38,13 +39,16 @@ export function ResumeUpload({ onResumeText }: ResumeUploadProps) {
       if (data.success && data.resumeText) {
         setSuccess(true);
         onResumeText(data.resumeText);
+        toast.success("Resume parsed successfully");
       } else {
         console.warn("[ResumeUpload] Parse failed:", data.error);
         setError(data.error || "Failed to parse resume");
+        toast.error("Failed to parse resume");
       }
     } catch (err) {
       console.error("[ResumeUpload] Fetch error:", err);
       setError("Failed to upload resume");
+      toast.error("Failed to upload resume");
     } finally {
       setLoading(false);
     }

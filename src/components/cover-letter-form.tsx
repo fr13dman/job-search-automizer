@@ -10,6 +10,7 @@ import { ResumeUpload } from "@/components/resume-upload";
 import { ToneSelector } from "@/components/tone-selector";
 import { CoverLetterOutput } from "@/components/cover-letter-output";
 import { ExportToolbar } from "@/components/export-toolbar";
+import { toast } from "sonner";
 import type { Tone } from "@/types";
 
 export function CoverLetterForm() {
@@ -23,9 +24,11 @@ export function CoverLetterForm() {
     streamProtocol: "text",
     onFinish: (_prompt, completion) => {
       console.log("[CoverLetterForm] Generation finished, length:", completion.length);
+      toast.success("Cover letter generated!");
     },
     onError: (err) => {
       console.error("[CoverLetterForm] Generation error:", err);
+      toast.error("Failed to generate cover letter");
     },
   });
 
