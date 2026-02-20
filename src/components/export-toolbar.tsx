@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { downloadPdf } from "@/lib/generate-pdf";
 import { extractMetadata, buildPdfFilename } from "@/lib/extract-metadata";
+import { toast } from "sonner";
 
 interface ExportToolbarProps {
   text: string;
@@ -22,9 +23,10 @@ export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbar
     try {
       await navigator.clipboard.writeText(stripMarkdownBold(text));
       setCopied(true);
+      toast.success("Copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback: do nothing
+      toast.error("Failed to copy");
     }
   }
 
@@ -33,6 +35,7 @@ export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbar
     const filename = buildPdfFilename(metadata);
     console.log("[ExportToolbar] PDF metadata:", metadata, "filename:", filename);
     downloadPdf(text, metadata, filename);
+    toast.success("PDF downloaded");
   }
 
   return (
