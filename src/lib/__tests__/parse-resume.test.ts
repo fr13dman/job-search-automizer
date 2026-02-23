@@ -1,28 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 
-let pdfLoadBehavior: "normal" | "corrupt" | "empty" | "whitespace-only" | "missing-text-field" = "normal";
+let pdfBehavior: "normal" | "corrupt" | "empty" | "whitespace-only" = "normal";
 
-vi.mock("pdf-parse", () => {
-  return {
-    PDFParse: function MockPDFParse() {
-      return {
-        load: async () => {
-          if (pdfLoadBehavior === "corrupt") throw new Error("Invalid PDF");
-        },
-        getText: async () => {
-          if (pdfLoadBehavior === "empty") return { pages: [], text: "", total: 0 };
-          if (pdfLoadBehavior === "whitespace-only") return { pages: [], text: "   \n\n  ", total: 1 };
-          if (pdfLoadBehavior === "missing-text-field") return { pages: [], total: 0 };
-          return {
-            pages: [{ text: "John Doe\nSoftware Engineer\n5 years experience", num: 1 }],
-            text: "John Doe\nSoftware Engineer\n5 years experience",
-            total: 1,
-          };
-        },
-      };
-    },
-  };
-});
+vi.mock("unpdf", () => ({
+  extractText: vi.fn(async () => {
+    if (pdfBehavior === "corrupt") throw new Error("Invalid PDF");
+    if (pdfBehavior === "empty") return { text: "", totalPages: 0 };
+    if (pdfBehavior === "whitespace-only") return { text: "   \n\n  ", totalPages: 1 };
+    return { text: "John Doe\nSoftware Engineer\n5 years experience", totalPages: 1 };
+  }),
+}));
 
 vi.mock("mammoth", () => ({
   extractRawText: vi.fn(async ({ buffer }: { buffer: Buffer }) => {
@@ -37,7 +24,7 @@ import { parseResume } from "@/lib/parse-resume";
 
 describe("parseResume", () => {
   it("parses a PDF buffer and returns text", async () => {
-    pdfLoadBehavior = "normal";
+    pdfBehavior = "normal";
     const buffer = Buffer.from("valid pdf content");
     const result = await parseResume(buffer, "resume.pdf");
     expect(result.success).toBe(true);
@@ -45,12 +32,11 @@ describe("parseResume", () => {
     expect(result.resumeText).toContain("Software Engineer");
   });
 
-  it("extracts text from the getText().text property (not the raw object)", async () => {
-    pdfLoadBehavior = "normal";
+  it("returns resumeText as a plain string", async () => {
+    pdfBehavior = "normal";
     const buffer = Buffer.from("valid pdf content");
     const result = await parseResume(buffer, "resume.pdf");
     expect(result.success).toBe(true);
-    // Ensure we got a plain string, not "[object Object]"
     expect(result.resumeText).not.toContain("[object Object]");
     expect(typeof result.resumeText).toBe("string");
   });
@@ -70,7 +56,7 @@ describe("parseResume", () => {
   });
 
   it("returns error for corrupt files", async () => {
-    pdfLoadBehavior = "corrupt";
+    pdfBehavior = "corrupt";
     const buffer = Buffer.from("corrupt");
     const result = await parseResume(buffer, "resume.pdf");
     expect(result.success).toBe(false);
@@ -78,7 +64,7 @@ describe("parseResume", () => {
   });
 
   it("returns error for empty PDF with no text content", async () => {
-    pdfLoadBehavior = "empty";
+    pdfBehavior = "empty";
     const buffer = Buffer.from("empty");
     const result = await parseResume(buffer, "resume.pdf");
     expect(result.success).toBe(false);
@@ -86,16 +72,8 @@ describe("parseResume", () => {
   });
 
   it("returns error for PDF with whitespace-only text", async () => {
-    pdfLoadBehavior = "whitespace-only";
+    pdfBehavior = "whitespace-only";
     const buffer = Buffer.from("whitespace pdf");
-    const result = await parseResume(buffer, "resume.pdf");
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("No text found");
-  });
-
-  it("returns error when getText result has no text field", async () => {
-    pdfLoadBehavior = "missing-text-field";
-    const buffer = Buffer.from("bad pdf");
     const result = await parseResume(buffer, "resume.pdf");
     expect(result.success).toBe(false);
     expect(result.error).toContain("No text found");

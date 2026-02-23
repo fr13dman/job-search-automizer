@@ -8,16 +8,13 @@ export async function parseResume(
 
   try {
     if (ext === "pdf") {
-      const { PDFParse } = await import("pdf-parse");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parser: any = new PDFParse({ data: buffer });
-      await parser.load();
-      const result = await parser.getText();
-      const text = result?.text?.trim();
-      if (!text) {
+      const { extractText } = await import("unpdf");
+      const { text } = await extractText(new Uint8Array(buffer));
+      const trimmed = text?.trim();
+      if (!trimmed) {
         return { success: false, error: "No text found in PDF" };
       }
-      return { success: true, resumeText: text };
+      return { success: true, resumeText: trimmed };
     }
 
     if (ext === "docx") {
