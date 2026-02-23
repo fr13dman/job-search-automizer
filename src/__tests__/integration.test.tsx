@@ -4,17 +4,30 @@ import userEvent from "@testing-library/user-event";
 
 // Mock useCompletion from @ai-sdk/react
 const mockComplete = vi.fn();
+const mockCompleteRecommendations = vi.fn();
 let mockCompletion = "";
 let mockIsLoading = false;
 let mockError: Error | null = null;
+let mockRecommendationsCompletion = "";
+let mockRecommendationsLoading = false;
 
 vi.mock("@ai-sdk/react", () => ({
-  useCompletion: () => ({
-    completion: mockCompletion,
-    isLoading: mockIsLoading,
-    complete: mockComplete,
-    error: mockError,
-  }),
+  useCompletion: ({ api }: { api: string }) => {
+    if (api === "/api/recommendations") {
+      return {
+        completion: mockRecommendationsCompletion,
+        isLoading: mockRecommendationsLoading,
+        complete: mockCompleteRecommendations,
+        error: null,
+      };
+    }
+    return {
+      completion: mockCompletion,
+      isLoading: mockIsLoading,
+      complete: mockComplete,
+      error: mockError,
+    };
+  },
 }));
 
 // Mock fetch globally
@@ -29,6 +42,8 @@ describe("Integration tests", () => {
     mockCompletion = "";
     mockIsLoading = false;
     mockError = null;
+    mockRecommendationsCompletion = "";
+    mockRecommendationsLoading = false;
   });
 
   it("full flow: mock scrape + mock parse + mock generate → cover letter appears", async () => {
@@ -166,6 +181,109 @@ describe("Integration tests", () => {
       name: /generate cover letter/i,
     });
     expect(btn).toBeDisabled();
+  });
+
+  it("additional instructions textarea is present in Input card", () => {
+    render(<Home />);
+    expect(screen.getByLabelText(/additional instructions/i)).toBeInTheDocument();
+  });
+
+  it("resume recommendations card is present on page", () => {
+    render(<Home />);
+    // Card title is exact text; placeholder is a longer string — use exact match to avoid ambiguity
+    expect(screen.getByText("Resume Recommendations")).toBeInTheDocument();
+  });
+
+  it("recommendations placeholder is shown before generation", () => {
+    render(<Home />);
+    expect(
+      screen.getByText(/resume recommendations will appear here/i)
+    ).toBeInTheDocument();
+  });
+
+  it("fires both complete and completeRecommendations when Generate is clicked", async () => {
+    const user = userEvent.setup();
+
+    mockFetch.mockImplementation(async (url: string, opts?: RequestInit) => {
+      if (url === "/api/scrape") {
+        return { json: async () => ({ success: true, jobDescription: "Engineer role" }) };
+      }
+      if (url === "/api/parse-resume") {
+        return { json: async () => ({ success: true, resumeText: "Jane Doe resume" }) };
+      }
+      return { json: async () => ({}) };
+    });
+
+    mockComplete.mockResolvedValue(undefined);
+    mockCompleteRecommendations.mockResolvedValue(undefined);
+
+    render(<Home />);
+
+    // Scrape job
+    await user.type(screen.getByLabelText(/job posting url/i), "https://example.com/job");
+    await user.click(screen.getByRole("button", { name: /fetch/i }));
+    await waitFor(() => expect(screen.getByText(/job description loaded/i)).toBeInTheDocument());
+
+    // Upload resume
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(["resume"], "resume.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(screen.getByText(/resume parsed successfully/i)).toBeInTheDocument());
+
+    // Generate
+    await user.click(screen.getByRole("button", { name: /generate cover letter/i }));
+
+    expect(mockComplete).toHaveBeenCalledOnce();
+    expect(mockCompleteRecommendations).toHaveBeenCalledOnce();
+  });
+
+  it("passes additionalInstructions in the generate request body", async () => {
+    const user = userEvent.setup();
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === "/api/scrape") {
+        return { json: async () => ({ success: true, jobDescription: "Engineer role" }) };
+      }
+      if (url === "/api/parse-resume") {
+        return { json: async () => ({ success: true, resumeText: "Jane Doe resume" }) };
+      }
+      return { json: async () => ({}) };
+    });
+
+    mockComplete.mockResolvedValue(undefined);
+    mockCompleteRecommendations.mockResolvedValue(undefined);
+
+    render(<Home />);
+
+    // Scrape job
+    await user.type(screen.getByLabelText(/job posting url/i), "https://example.com/job");
+    await user.click(screen.getByRole("button", { name: /fetch/i }));
+    await waitFor(() => expect(screen.getByText(/job description loaded/i)).toBeInTheDocument());
+
+    // Upload resume
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(["resume"], "resume.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(screen.getByText(/resume parsed successfully/i)).toBeInTheDocument());
+
+    // Type additional instructions
+    await user.type(
+      screen.getByLabelText(/additional instructions/i),
+      "Emphasize leadership"
+    );
+
+    await user.click(screen.getByRole("button", { name: /generate cover letter/i }));
+
+    expect(mockComplete).toHaveBeenCalledWith(
+      "",
+      expect.objectContaining({
+        body: expect.objectContaining({ additionalInstructions: "Emphasize leadership" }),
+      })
+    );
+  });
+
+  it("shows recommendations completion text when streamed", () => {
+    mockRecommendationsCompletion = "• Update Summary section to highlight leadership skills";
+    render(<Home />);
+    expect(screen.getByText(/Update Summary section/)).toBeInTheDocument();
   });
 
   it("stream interruption: partial text remains visible and exportable", async () => {

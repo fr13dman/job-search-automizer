@@ -8,7 +8,7 @@ const VALID_TONES = new Set(TONE_OPTIONS.map((t) => t.value));
 
 export async function POST(request: NextRequest) {
   try {
-    const { resumeText, jobDescription, tone = "professional" } = await request.json();
+    const { resumeText, jobDescription, tone = "professional", additionalInstructions } = await request.json();
 
     console.log("[/api/generate] Received request", {
       resumeTextLength: resumeText?.length ?? 0,
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const safeTone: Tone = VALID_TONES.has(tone) ? tone : "professional";
-    const { system, user } = buildPrompt(resumeText, jobDescription, safeTone);
+    const { system, user } = buildPrompt(resumeText, jobDescription, safeTone, additionalInstructions);
 
     console.log("[/api/generate] Calling streamText with Claude Sonnet, tone:", safeTone);
 

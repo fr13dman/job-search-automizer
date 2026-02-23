@@ -82,6 +82,32 @@ describe("POST /api/generate", () => {
     expect(call.system).toContain("polished");
   });
 
+  it("passes additionalInstructions to buildPrompt when provided", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "John Doe",
+        jobDescription: "Engineer",
+        additionalInstructions: "Emphasize leadership",
+      })
+    );
+
+    const call = vi.mocked(streamText).mock.calls[0][0];
+    expect(call.messages[0].content).toContain("Emphasize leadership");
+    expect(call.messages[0].content).toContain("Additional Instructions");
+  });
+
+  it("does not include Additional Instructions section when omitted", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "John Doe",
+        jobDescription: "Engineer",
+      })
+    );
+
+    const call = vi.mocked(streamText).mock.calls[0][0];
+    expect(call.messages[0].content).not.toContain("Additional Instructions");
+  });
+
   it("returns error when resumeText is missing", async () => {
     const res = await POST(
       makeRequest({ jobDescription: "Some job" })

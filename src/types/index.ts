@@ -24,6 +24,7 @@ export interface GenerateRequest {
   resumeText: string;
   jobDescription: string;
   tone: Tone;
+  additionalInstructions?: string;
 }
 
 export interface PromptParts {

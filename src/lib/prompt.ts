@@ -23,10 +23,15 @@ function truncate(text: string, maxLength: number): string {
 export function buildPrompt(
   resumeText: string,
   jobDescription: string,
-  tone: Tone = "professional"
+  tone: Tone = "professional",
+  additionalInstructions?: string
 ): PromptParts {
   const safeResume = truncate(resumeText, MAX_INPUT_LENGTH);
   const safeJob = truncate(jobDescription, MAX_INPUT_LENGTH);
+
+  const additionalSection = additionalInstructions?.trim()
+    ? `\n\n## Additional Instructions\n${additionalInstructions.trim()}`
+    : "";
 
   return {
     system: `You are an expert career coach and professional writer. Your task is to write a compelling, tailored cover letter.
@@ -53,8 +58,30 @@ Emphasis formatting:
 ${safeResume}
 
 ## Job Description
-${safeJob}
+${safeJob}${additionalSection}
 
 Write the cover letter now. Remember: under 500 words, simple language, ${tone} tone, and bold the most impactful narrative.`,
+  };
+}
+
+export function buildRecommendationsPrompt(
+  resumeText: string,
+  jobDescription: string
+): PromptParts {
+  const safeResume = truncate(resumeText, MAX_INPUT_LENGTH);
+  const safeJob = truncate(jobDescription, MAX_INPUT_LENGTH);
+
+  return {
+    system: `You are an expert resume coach. Given a resume and a job description, identify specific, concrete improvements the candidate should make to their resume to better match the role. Return exactly 5–8 bullet points. Each bullet should name the specific section to update and what to change or add. Be direct and specific. Do not fabricate skills or experience not implied by the resume.`,
+
+    user: `Review the resume below against the job description and return 5–8 bullet points of specific, actionable improvements.
+
+## Resume
+${safeResume}
+
+## Job Description
+${safeJob}
+
+Return only the bullet points. No preamble, no summary.`,
   };
 }
