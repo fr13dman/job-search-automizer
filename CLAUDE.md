@@ -19,7 +19,7 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 
 1. User provides a job posting URL → **`/api/scrape`** fetches HTML and extracts text via Cheerio (`src/lib/scrape-job.ts`)
 2. User uploads a resume (PDF/DOCX) → **`/api/parse-resume`** extracts text via pdf-parse or mammoth (`src/lib/parse-resume.ts`)
-3. User selects a tone and clicks generate → **`/api/generate`** streams a cover letter from Claude Sonnet using Vercel AI SDK (`@ai-sdk/anthropic` + `ai` `streamText`)
+3. User selects a tone and clicks generate → **`/api/generate`** streams a cover letter from `claude-sonnet-4-5-20250929` using Vercel AI SDK (`@ai-sdk/anthropic` + `ai` `streamText`)
 4. Output is editable, can be copied (markdown bold stripped) or exported as a styled PDF via jsPDF (`src/lib/generate-pdf.ts`)
 
 ### Key Conventions
@@ -37,6 +37,10 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 - `environmentMatchGlobs` switches to `node` environment for `src/lib/__tests__/` and `src/app/api/__tests__/`
 - Test setup file: `src/test-setup.ts`
 - Tests co-located in `__tests__/` directories next to source files
+
+### Notable Config
+
+- `pdf-parse` is listed in `next.config.ts` `serverExternalPackages` — required to prevent Next.js from bundling it (it uses native bindings).
 
 ### Environment Variables
 
