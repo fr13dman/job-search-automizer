@@ -9,7 +9,7 @@ export async function parseResume(
   try {
     if (ext === "pdf") {
       const { extractText } = await import("unpdf");
-      const { text } = await extractText(new Uint8Array(buffer));
+      const { text } = await extractText(new Uint8Array(buffer), { mergePages: true });
       const trimmed = text?.trim();
       if (!trimmed) {
         return { success: false, error: "No text found in PDF" };
