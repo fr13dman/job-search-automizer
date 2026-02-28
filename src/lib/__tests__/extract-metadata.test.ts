@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractMetadata, buildPdfFilename } from "@/lib/extract-metadata";
+import { extractMetadata, buildPdfFilename, buildResumeFilename } from "@/lib/extract-metadata";
 
 describe("extractMetadata", () => {
   const sampleLetter = `Dear Hiring Manager,
@@ -95,5 +95,48 @@ describe("buildPdfFilename", () => {
   it("builds filename with no metadata", () => {
     const result = buildPdfFilename({});
     expect(result).toMatch(/^Cover-Letter_\d{4}\.pdf$/);
+  });
+});
+
+describe("buildResumeFilename", () => {
+  it("includes candidate name, job title, and company delimited by hyphens", () => {
+    const resume = "John Doe\nSoftware Engineer\nExperience...";
+    const jd = "Senior Engineer\nCompany: Acme Corp";
+    const result = buildResumeFilename(resume, jd);
+    expect(result).toBe("john-doe-senior-engineer-acme-corp-resume");
+  });
+
+  it("always ends with 'resume'", () => {
+    const result = buildResumeFilename("", "");
+    expect(result).toBe("resume");
+  });
+
+  it("uses only job description for company and position when resume has no name", () => {
+    const resume = "SKILLS\n- TypeScript";
+    const jd = "Job Title: Data Analyst\nCompany: Meta";
+    const result = buildResumeFilename(resume, jd);
+    expect(result).toBe("data-analyst-meta-resume");
+  });
+
+  it("skips all-caps first lines (section headings) when finding candidate name", () => {
+    const resume = "EXPERIENCE\nJane Smith\n- Built systems";
+    const jd = "";
+    const result = buildResumeFilename(resume, jd);
+    expect(result).toContain("jane-smith");
+  });
+
+  it("slugifies special characters in candidate name", () => {
+    const resume = "O'Brien, Mary-Kate\nSoftware Lead";
+    const jd = "";
+    const result = buildResumeFilename(resume, jd);
+    expect(result).toMatch(/^o-brien-mary-kate-resume$|^obrien-mary-kate-resume$/);
+  });
+
+  it("omits empty parts and does not produce double hyphens", () => {
+    const resume = "Alice Johnson\nEngineer";
+    const jd = ""; // no extractable company/title
+    const result = buildResumeFilename(resume, jd);
+    expect(result).not.toMatch(/--/);
+    expect(result).toBe("alice-johnson-resume");
   });
 });

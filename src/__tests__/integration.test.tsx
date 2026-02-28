@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 
 // Mock useCompletion from @ai-sdk/react
 const mockComplete = vi.fn();
@@ -8,15 +9,23 @@ const mockCompleteRecommendations = vi.fn();
 let mockCompletion = "";
 let mockIsLoading = false;
 let mockError: Error | null = null;
-let mockRecommendationsCompletion = "";
-let mockRecommendationsLoading = false;
+let mockCuratedResumeCompletion = "";
+let mockCuratedResumeLoading = false;
+let capturedCurateOnFinish: ((prompt: string, completion: string) => void) | undefined;
 
 vi.mock("@ai-sdk/react", () => ({
-  useCompletion: ({ api }: { api: string }) => {
-    if (api === "/api/recommendations") {
+  useCompletion: ({
+    api,
+    onFinish,
+  }: {
+    api: string;
+    onFinish?: (prompt: string, completion: string) => void;
+  }) => {
+    if (api === "/api/curate-resume") {
+      capturedCurateOnFinish = onFinish;
       return {
-        completion: mockRecommendationsCompletion,
-        isLoading: mockRecommendationsLoading,
+        completion: mockCuratedResumeCompletion,
+        isLoading: mockCuratedResumeLoading,
         complete: mockCompleteRecommendations,
         error: null,
       };
@@ -42,8 +51,9 @@ describe("Integration tests", () => {
     mockCompletion = "";
     mockIsLoading = false;
     mockError = null;
-    mockRecommendationsCompletion = "";
-    mockRecommendationsLoading = false;
+    mockCuratedResumeCompletion = "";
+    mockCuratedResumeLoading = false;
+    capturedCurateOnFinish = undefined;
   });
 
   it("full flow: mock scrape + mock parse + mock generate → cover letter appears", async () => {
@@ -188,16 +198,16 @@ describe("Integration tests", () => {
     expect(screen.getByLabelText(/additional instructions/i)).toBeInTheDocument();
   });
 
-  it("resume recommendations card is present on page", () => {
+  it("curated resume card is present on page", () => {
     render(<Home />);
     // Card title is exact text; placeholder is a longer string — use exact match to avoid ambiguity
-    expect(screen.getByText("Resume Recommendations")).toBeInTheDocument();
+    expect(screen.getByText("Curated Resume")).toBeInTheDocument();
   });
 
-  it("recommendations placeholder is shown before generation", () => {
+  it("curated resume placeholder is shown before generation", () => {
     render(<Home />);
     expect(
-      screen.getByText(/resume recommendations will appear here/i)
+      screen.getByText(/your curated resume will appear here/i)
     ).toBeInTheDocument();
   });
 
@@ -280,10 +290,18 @@ describe("Integration tests", () => {
     );
   });
 
-  it("shows recommendations completion text when streamed", () => {
-    mockRecommendationsCompletion = "• Update Summary section to highlight leadership skills";
+  it("shows curated resume completion text when streamed", () => {
+    mockCuratedResumeCompletion = "EXPERIENCE\n- Led backend team";
     render(<Home />);
-    expect(screen.getByText(/Update Summary section/)).toBeInTheDocument();
+    expect(screen.getByText(/EXPERIENCE/)).toBeInTheDocument();
+  });
+
+  it("shows toast success when curated resume generation completes", () => {
+    const toastSpy = vi.spyOn(toast, "success").mockImplementation(() => ({} as never));
+    render(<Home />);
+    capturedCurateOnFinish?.("", "EXPERIENCE\n- Led backend team");
+    expect(toastSpy).toHaveBeenCalledWith("Resume curated!");
+    toastSpy.mockRestore();
   });
 
   it("stream interruption: partial text remains visible and exportable", async () => {

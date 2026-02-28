@@ -124,6 +124,35 @@ export function extractMetadata(
   return metadata;
 }
 
+function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Build a filename for the curated resume using candidate name, job title, and company.
+ * Format: {candidate-name}-{job-title}-{company}-resume  (no extension)
+ */
+export function buildResumeFilename(resumeText: string, jobDescription: string): string {
+  // Candidate name: first non-empty line that starts with a letter and is not an ALL-CAPS heading
+  const nameLine =
+    resumeText
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 0 && /^[A-Za-z]/.test(l) && l !== l.toUpperCase()) ?? "";
+  const candidateName = nameLine.replace(/[^a-zA-Z0-9 '-]+/g, "").trim();
+
+  const companyName = extractCompanyName("", jobDescription);
+  const jobTitle = extractJobTitle("", jobDescription);
+
+  const parts: string[] = [];
+  if (candidateName) parts.push(slugify(candidateName));
+  if (jobTitle) parts.push(slugify(jobTitle));
+  if (companyName) parts.push(slugify(companyName));
+  parts.push("resume");
+
+  return parts.join("-");
+}
+
 export function buildPdfFilename(metadata: PdfMetadata): string {
   const year = new Date().getFullYear();
   const parts: string[] = ["Cover-Letter"];
