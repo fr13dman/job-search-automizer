@@ -16,7 +16,7 @@ describe("Home page", () => {
   it("renders header with title", () => {
     render(<Home />);
     expect(
-      screen.getByRole("heading", { name: /cover letter generator/i })
+      screen.getByRole("heading", { name: /job application helper/i })
     ).toBeInTheDocument();
   });
 

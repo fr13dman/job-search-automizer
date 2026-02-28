@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPrompt, buildRecommendationsPrompt } from "@/lib/prompt";
+import { buildPrompt, buildCurateResumePrompt } from "@/lib/prompt";
 
 describe("buildPrompt", () => {
   it("returns system and user strings that are non-empty", () => {
@@ -92,47 +92,69 @@ describe("buildPrompt", () => {
   });
 });
 
-describe("buildRecommendationsPrompt", () => {
+describe("buildCurateResumePrompt", () => {
   it("returns non-empty system and user strings", () => {
-    const result = buildRecommendationsPrompt("Resume text", "Job description");
+    const result = buildCurateResumePrompt("Resume text", "Job description");
     expect(result.system.length).toBeGreaterThan(0);
     expect(result.user.length).toBeGreaterThan(0);
   });
 
   it("includes resume text in user prompt", () => {
-    const result = buildRecommendationsPrompt("My resume content here", "Some job");
+    const result = buildCurateResumePrompt("My resume content here", "Some job");
     expect(result.user).toContain("My resume content here");
   });
 
   it("includes job description in user prompt", () => {
-    const result = buildRecommendationsPrompt("Some resume", "Senior Engineer at Acme");
+    const result = buildCurateResumePrompt("Some resume", "Senior Engineer at Acme");
     expect(result.user).toContain("Senior Engineer at Acme");
   });
 
   it("truncates inputs exceeding 8,000 characters", () => {
     const longResume = "x".repeat(10_000);
     const longJob = "y".repeat(10_000);
-    const result = buildRecommendationsPrompt(longResume, longJob);
+    const result = buildCurateResumePrompt(longResume, longJob);
     expect(result.user).toContain("... [truncated]");
+    expect(result.user).not.toContain("x".repeat(10_000));
+    expect(result.user).not.toContain("y".repeat(10_000));
   });
 
-  it("system prompt instructs to return bullet points", () => {
-    const result = buildRecommendationsPrompt("Resume", "Job");
-    expect(result.system).toContain("bullet");
+  it("system prompt contains Zero hallucinations rule", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("no-hallucination");
   });
 
-  it("system prompt instructs not to fabricate skills", () => {
-    const result = buildRecommendationsPrompt("Resume", "Job");
-    expect(result.system).toContain("not fabricate");
+  it("system prompt instructs to preserve section headings", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("section headings");
   });
 
-  it("system prompt asks for 5-8 bullet points", () => {
-    const result = buildRecommendationsPrompt("Resume", "Job");
-    expect(result.system).toMatch(/5.{0,5}8/);
+  it("system prompt allows reordering bullets", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("reorder");
   });
 
-  it("user prompt instructs to return only bullet points without preamble", () => {
-    const result = buildRecommendationsPrompt("Resume", "Job");
-    expect(result.user).toContain("bullet points");
+  it("user prompt instructs to return only resume with no preamble", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.user).toContain("No preamble");
+  });
+
+  it("system prompt enforces 2-page maximum", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("2 pages");
+  });
+
+  it("system prompt instructs ATS optimization", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("ATS");
+  });
+
+  it("system prompt instructs to use keywords from job description", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("keywords");
+  });
+
+  it("system prompt restricts ATS keywords to existing resume evidence", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Skills section");
   });
 });

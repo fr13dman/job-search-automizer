@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Lato } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/providers";
 import "./globals.css";
 
 const lato = Lato({
@@ -10,8 +11,8 @@ const lato = Lato({
 });
 
 export const metadata: Metadata = {
-  title: "Cover Letter Generator",
-  description: "Generate tailored cover letters with AI",
+  title: "Job Application Helper",
+  description: "Generate tailored cover letters and curated resumes with AI",
 };
 
 export default function RootLayout({
@@ -20,10 +21,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${lato.variable} antialiased`}>
-        {children}
-        <Toaster position="bottom-right" richColors />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster position="bottom-right" richColors />
+        </ThemeProvider>
       </body>
     </html>
   );
