@@ -45,3 +45,26 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 ### Environment Variables
 
 - `ANTHROPIC_API_KEY` — required for the `/api/generate` endpoint (used by `@ai-sdk/anthropic`)
+
+## Vercel Deployment
+
+### Deploying
+
+```bash
+vercel build --prod   # build locally into .vercel/output
+vercel deploy --prebuilt --prod  # upload pre-built artifacts
+```
+
+### `npm error Invalid Version:` on Vercel build servers
+
+Vercel's remote build servers use an older npm version that can fail with `npm error Invalid Version:` (no version string after the colon) immediately during `npm install`. This has been observed when the dependency tree contains packages whose version strings are incompatible with that npm version.
+
+**Diagnosis steps:**
+1. Run `vercel build --prod` locally — if it succeeds, the code is fine and the issue is Vercel's npm version
+2. Check recently added packages in `package.json` for anything pulling in large dependency trees (e.g. CLI tools mistakenly listed in `dependencies` instead of `devDependencies`)
+3. Never list `vercel` in production `dependencies` — it pulls in ~100 packages and has been confirmed to trigger this error
+
+**Workaround:** Build locally and deploy pre-built artifacts to bypass Vercel's `npm install` entirely:
+```bash
+vercel build --prod && vercel deploy --prebuilt --prod
+```
