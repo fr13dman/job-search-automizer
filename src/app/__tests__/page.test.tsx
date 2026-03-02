@@ -39,9 +39,7 @@ describe("Home page", () => {
 
   it("generate button is disabled when inputs are incomplete", () => {
     render(<Home />);
-    const generateBtn = screen.getByRole("button", {
-      name: /generate cover letter/i,
-    });
+    const generateBtn = screen.getByTestId("generate-btn");
     expect(generateBtn).toBeDisabled();
   });
 });

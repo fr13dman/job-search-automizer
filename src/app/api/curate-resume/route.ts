@@ -5,11 +5,12 @@ import { buildCurateResumePrompt } from "@/lib/prompt";
 
 export async function POST(request: NextRequest) {
   try {
-    const { resumeText, jobDescription } = await request.json();
+    const { resumeText, jobDescription, evaluationFeedback } = await request.json();
 
     console.log("[/api/curate-resume] Received request", {
       resumeTextLength: resumeText?.length ?? 0,
       jobDescriptionLength: jobDescription?.length ?? 0,
+      hasFeedback: !!evaluationFeedback,
     });
 
     if (!resumeText || !jobDescription) {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { system, user } = buildCurateResumePrompt(resumeText, jobDescription);
+    const { system, user } = buildCurateResumePrompt(resumeText, jobDescription, evaluationFeedback);
 
     console.log("[/api/curate-resume] Calling streamText with Claude Sonnet");
 

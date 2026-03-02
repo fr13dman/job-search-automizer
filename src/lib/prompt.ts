@@ -70,7 +70,8 @@ Write the cover letter now. Remember: under 500 words, simple language, ${tone} 
 
 export function buildCurateResumePrompt(
   resumeText: string,
-  jobDescription: string
+  jobDescription: string,
+  evaluationFeedback?: string
 ): PromptParts {
   const safeResume = truncate(resumeText, MAX_INPUT_LENGTH);
   const safeJob = truncate(jobDescription, MAX_INPUT_LENGTH);
@@ -91,7 +92,9 @@ Length: Two pages is a loose guideline, not a hard limit. Use as many pages as n
 
 ATS optimization: Naturally incorporate relevant keywords and phrases from the job description throughout the resume — especially in the Skills section and experience bullet points. Only use keywords the candidate already has clear evidence for in their original resume. This ensures the resume ranks well in Applicant Tracking Systems without fabricating new skills.
 
-Role emphasis: In each work experience entry, wrap the job title or position name in **bold** markdown — for example: **Senior Software Engineer** — Acme Corp | Jan 2022 – Present. Apply bold to the position name only, not to the company name, dates, or bullet points beneath it.`,
+Role emphasis: In each work experience entry, wrap the job title or position name in **bold** markdown — for example: **Senior Software Engineer** — Acme Corp | Jan 2022 – Present. Apply bold to the position name only, not to the company name, dates, or bullet points beneath it.
+
+Output format: Use plain text only. Do NOT use any other markdown formatting — no # headings, no --- dividers, no *italic*, no _underscores_, no \`code\`, no [links](url). Section headings must be written in ALL CAPS plain text (e.g. EXPERIENCE, EDUCATION, SKILLS). The ONLY markdown permitted is **bold** for role/position names as described above.`,
 
     user: `Rewrite the resume below so it is tailored to the job description. Use only content from the original resume.
 
@@ -99,7 +102,11 @@ Role emphasis: In each work experience entry, wrap the job title or position nam
 ${safeResume}
 
 ## Job Description
-${safeJob}
+${safeJob}${
+  evaluationFeedback
+    ? `\n\n## Previous Attempt Feedback\nThe previous version was rejected by an automated evaluation. You MUST address every issue below:\n\n${evaluationFeedback}`
+    : ""
+}
 
 Return only the complete rewritten resume text. No preamble, no commentary.`,
   };

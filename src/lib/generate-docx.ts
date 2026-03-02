@@ -5,6 +5,7 @@ import {
   HeadingLevel,
   TextRun,
 } from "docx";
+import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
 
 function inlineBoldRuns(text: string): TextRun[] {
   return text
@@ -53,7 +54,7 @@ export async function downloadDocx(
   resumeText: string,
   filename = "curated-resume.docx"
 ): Promise<void> {
-  const lines = resumeText.split("\n");
+  const lines = stripNonBoldMarkdown(resumeText).split("\n");
   const paragraphs = lines.map(classifyLine);
 
   const doc = new Document({

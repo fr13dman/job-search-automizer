@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCompletion } from "@ai-sdk/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,55 @@ import { ResumeUpload } from "@/components/resume-upload";
 import { ToneSelector } from "@/components/tone-selector";
 import { CoverLetterOutput } from "@/components/cover-letter-output";
 import { CuratedResume } from "@/components/curated-resume";
+import { ResumeEvaluation } from "@/components/resume-evaluation";
+import { ResumeProgress, type ResumePhase } from "@/components/resume-progress";
 import { ExportToolbar } from "@/components/export-toolbar";
 import { toast } from "sonner";
-import type { Tone } from "@/types";
+import type { Tone, ResumeEvaluation as ResumeEvaluationType, AttemptRecord } from "@/types";
+
+const MAX_GENERATION_ATTEMPTS = 3;
+
+const GENERATE_PHRASES = [
+  "Generate Magnificence",
+  "Craft Brilliance",
+  "Forge Excellence",
+  "Summon Greatness",
+  "Conjure Genius",
+  "Unleash Potential",
+  "Create the Extraordinary",
+  "Inspire Brilliance",
+  "Elevate Your Story",
+  "Shape Your Narrative",
+  "Build Something Remarkable",
+  "Craft Your Legacy",
+];
+
+function pickPhrase(): string {
+  return GENERATE_PHRASES[Math.floor(Math.random() * GENERATE_PHRASES.length)];
+}
+
+function buildEvaluationFeedback(evaluation: ResumeEvaluationType): string {
+  const lines: string[] = [];
+
+  if (evaluation.hallucinationsFound && evaluation.hallucinationDetails.length > 0) {
+    lines.push(
+      "Hallucinations (content NOT in the original resume) that MUST be removed entirely:"
+    );
+    evaluation.hallucinationDetails.forEach((d) => lines.push(`- ${d}`));
+  }
+
+  if (evaluation.missingKeywords.length > 0) {
+    lines.push(
+      `\nKeywords from the job description that are missing and should be incorporated (only if the original resume supports them): ${evaluation.missingKeywords.join(", ")}`
+    );
+  }
+
+  lines.push(
+    `\nPrevious ATS score: ${evaluation.atsScore}/100. ${evaluation.overallAssessment}`
+  );
+
+  return lines.join("\n");
+}
 
 export function CoverLetterForm() {
   const [jobDescription, setJobDescription] = useState("");
@@ -22,6 +68,16 @@ export function CoverLetterForm() {
   const [tone, setTone] = useState<Tone>("professional");
   const [outputText, setOutputText] = useState("");
   const [additionalInstructions, setAdditionalInstructions] = useState("");
+  const [evaluationResult, setEvaluationResult] = useState<ResumeEvaluationType | null>(null);
+  const [finalCuratedResume, setFinalCuratedResume] = useState("");
+  const [resumePhase, setResumePhase] = useState<ResumePhase>("idle");
+  const [currentAttempt, setCurrentAttempt] = useState(0);
+  const [attemptHistory, setAttemptHistory] = useState<AttemptRecord[]>([]);
+  // Stable initial value for SSR; randomized after hydration
+  const [buttonPhrase, setButtonPhrase] = useState(GENERATE_PHRASES[0]);
+  useEffect(() => { setButtonPhrase(pickPhrase()); }, []);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const { completion, isLoading, complete, error } = useCompletion({
     api: "/api/generate",
@@ -39,21 +95,17 @@ export function CoverLetterForm() {
   });
 
   const {
-    completion: curatedResumeCompletion,
     isLoading: curatedResumeLoading,
     complete: completeCurateResume,
+    stop: stopCurateResume,
   } = useCompletion({
     api: "/api/curate-resume",
     streamProtocol: "text",
-    onFinish: async (_prompt, completion) => {
-      console.log("[CoverLetterForm] Resume curated, length:", completion.length);
-      toast.success("Resume curated!");
-      const { fireConfetti } = await import("@/lib/confetti");
-      fireConfetti("resume");
-    },
     onError: (err) => {
       console.error("[CoverLetterForm] Curate resume error:", err);
-      toast.error("Failed to curate resume");
+      if (!abortControllerRef.current?.signal.aborted) {
+        toast.error("Failed to curate resume");
+      }
     },
   });
 
@@ -64,69 +116,191 @@ export function CoverLetterForm() {
       resumeTextLength: resumeText.length,
       tone,
     });
+
     setOutputText("");
+    setEvaluationResult(null);
+    setFinalCuratedResume("");
+    setResumePhase("idle");
+    setCurrentAttempt(0);
+    setAttemptHistory([]);
+    setButtonPhrase(pickPhrase());
+    setIsCancelling(false);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    let currentCurated = "";
+    let lastEvaluation: ResumeEvaluationType | null = null;
+
     try {
-      const coverLetterPromise = complete("", {
+      // Cover letter fires once and streams independently — never retried
+      complete("", {
         body: { resumeText, jobDescription, tone, additionalInstructions: additionalInstructions || undefined },
-      });
-      const curateResumePromise = completeCurateResume("", {
-        body: { resumeText, jobDescription },
-      });
-      await Promise.all([coverLetterPromise, curateResumePromise]);
+      }).catch(() => {}); // errors surfaced via the onError callback above
+
+      let lastFeedback: string | undefined;
+
+      for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+        if (controller.signal.aborted) break;
+
+        setCurrentAttempt(attempt);
+        setResumePhase("curating");
+
+        const curated = await completeCurateResume("", {
+          body: {
+            resumeText,
+            jobDescription,
+            evaluationFeedback: lastFeedback,
+          },
+        });
+
+        if (controller.signal.aborted) break;
+
+        currentCurated = curated ?? "";
+        if (!currentCurated) break;
+
+        setResumePhase("evaluating");
+
+        let evaluation: ResumeEvaluationType | null = null;
+        let passed = false;
+        let evaluationError: string | undefined;
+
+        try {
+          const res = await fetch("/api/evaluate-resume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resumeText, jobDescription, curatedResume: currentCurated }),
+            signal: controller.signal,
+          });
+
+          if (res.ok) {
+            evaluation = await res.json();
+            lastEvaluation = evaluation;
+            passed = !evaluation!.hallucinationsFound;
+            console.log(
+              `[CoverLetterForm] Evaluation attempt ${attempt}: atsScore=${evaluation!.atsScore}, hallucinationsFound=${evaluation!.hallucinationsFound}`
+            );
+            if (passed) {
+              toast.success("Resume curated!");
+              const { fireConfetti } = await import("@/lib/confetti");
+              fireConfetti("resume");
+            }
+          } else {
+            let details: string | undefined;
+            try {
+              const errBody = await res.json();
+              details = errBody.details as string | undefined;
+            } catch {
+              // ignore JSON parse failure
+            }
+            evaluationError = details ?? `Evaluation service returned HTTP ${res.status}.`;
+            console.warn(`[CoverLetterForm] Evaluation returned ${res.status} on attempt ${attempt}`, { details });
+          }
+        } catch (err) {
+          if (controller.signal.aborted) break;
+          evaluationError = `Evaluation service encountered an error: ${err instanceof Error ? err.message : String(err)}`;
+          console.warn(`[CoverLetterForm] Evaluation threw on attempt ${attempt}:`, err);
+        }
+
+        // Record this attempt's result in history
+        setAttemptHistory((prev) => [
+          ...prev,
+          { attempt, evaluation, passed, evaluationError },
+        ]);
+
+        if (passed || attempt === MAX_GENERATION_ATTEMPTS) break;
+
+        // Build feedback for the next attempt from the failed evaluation
+        if (evaluation) {
+          lastFeedback = buildEvaluationFeedback(evaluation);
+          console.log(`[CoverLetterForm] Hallucinations detected, retrying with feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);
+        } else {
+          console.log(`[CoverLetterForm] Evaluation error, retrying without feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);
+        }
+      }
     } catch (err) {
-      console.error("[CoverLetterForm] complete() threw:", err);
+      console.warn("[CoverLetterForm] handleGenerate threw:", err);
+    } finally {
+      setResumePhase("done");
+      setEvaluationResult(lastEvaluation);
+      setFinalCuratedResume(currentCurated);
+      setIsCancelling(false);
+      abortControllerRef.current = null;
     }
   }
 
-  const canGenerate = !!jobDescription && !!resumeText && !isLoading && !curatedResumeLoading;
+  function handleCancel() {
+    setIsCancelling(true);
+    abortControllerRef.current?.abort();
+    stopCurateResume();
+  }
+
+  const isBusy = isLoading || curatedResumeLoading || resumePhase === "curating" || resumePhase === "evaluating";
+  const canGenerate = !!jobDescription && !!resumeText && !isBusy;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* ── Input card ── slate-blue accent */}
-      <Card className="border-t-4 border-t-blue-600/70 shadow-sm">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/60 dark:from-slate-800/50 dark:to-blue-950/30 rounded-t-[calc(var(--radius-lg)-1px)]">
-          <CardTitle className="text-slate-700 dark:text-slate-200">Input</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          <JobInput onJobDescription={setJobDescription} />
-          <Separator />
-          <ResumeUpload onResumeText={setResumeText} />
-          <Separator />
-          <ToneSelector value={tone} onChange={setTone} />
-          <Separator />
-          <div className="space-y-2">
-            <Label htmlFor="additional-instructions">Additional instructions (optional)</Label>
-            <Textarea
-              id="additional-instructions"
-              placeholder="e.g. Emphasize leadership experience, mention my interest in remote work, keep it under 300 words..."
-              value={additionalInstructions}
-              onChange={(e) => setAdditionalInstructions(e.target.value)}
-              rows={3}
-              className="text-sm"
-            />
-          </div>
-          <Button
-            onClick={handleGenerate}
-            disabled={!canGenerate}
-            className="w-full bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white border-0 shadow-md hover:shadow-lg transition-all"
-            size="lg"
-          >
-            {isLoading || curatedResumeLoading ? "Generating..." : "Generate Cover Letter"}
-          </Button>
-          {error && (
-            <div className="rounded-md bg-red-50 dark:bg-red-950 p-3 text-sm text-red-800 dark:text-red-200">
-              {error.message || "Failed to generate cover letter"}
+    <div className="space-y-6">
+      {/* ── Row 1: Input + Cover Letter side-by-side ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Input card ── slate-blue accent */}
+        <Card className="border-t-4 border-t-blue-600/70 shadow-sm">
+          <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/60 dark:from-slate-800/50 dark:to-blue-950/30 rounded-t-[calc(var(--radius-lg)-1px)]">
+            <CardTitle className="text-slate-700 dark:text-slate-200">Input</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-6">
+            <JobInput onJobDescription={setJobDescription} />
+            <Separator />
+            <ResumeUpload onResumeText={setResumeText} />
+            <Separator />
+            <ToneSelector value={tone} onChange={setTone} />
+            <Separator />
+            <div className="space-y-2">
+              <Label htmlFor="additional-instructions">Additional instructions (optional)</Label>
+              <Textarea
+                id="additional-instructions"
+                placeholder="e.g. Emphasize leadership experience, mention my interest in remote work, keep it under 300 words..."
+                value={additionalInstructions}
+                onChange={(e) => setAdditionalInstructions(e.target.value)}
+                rows={3}
+                className="text-sm"
+              />
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="flex gap-2">
+              <Button
+                data-testid="generate-btn"
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                className="btn-gradient-animate flex-1 bg-gradient-to-r from-blue-700 via-violet-600 to-indigo-700 hover:from-blue-800 hover:via-violet-700 hover:to-indigo-800 text-white border-0 shadow-md hover:shadow-lg transition-shadow"
+                size="lg"
+              >
+                {isBusy ? "Generating…" : buttonPhrase}
+              </Button>
+              {isBusy && (
+                <Button
+                  data-testid="cancel-btn"
+                  onClick={handleCancel}
+                  disabled={isCancelling}
+                  variant="outline"
+                  size="lg"
+                  className="shrink-0"
+                >
+                  {isCancelling ? "Stopping…" : "Stop"}
+                </Button>
+              )}
+            </div>
+            {error && (
+              <div className="rounded-md bg-red-50 dark:bg-red-950 p-3 text-sm text-red-800 dark:text-red-200">
+                {error.message || "Failed to generate cover letter"}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      <div className="flex flex-col gap-6">
-        {/* ── Output card ── teal accent */}
+        {/* Cover Letter Output card ── teal accent */}
         <Card className="border-t-4 border-t-teal-600/70 shadow-sm">
           <CardHeader className="bg-gradient-to-r from-slate-50 to-teal-50/60 dark:from-slate-800/50 dark:to-teal-950/30 rounded-t-[calc(var(--radius-lg)-1px)]">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-slate-700 dark:text-slate-200">Output</CardTitle>
+              <CardTitle className="text-slate-700 dark:text-slate-200">Cover Letter</CardTitle>
               <ExportToolbar
                 text={outputText || completion}
                 jobDescription={jobDescription}
@@ -142,21 +316,43 @@ export function CoverLetterForm() {
             />
           </CardContent>
         </Card>
-
-        {/* ── Curated Resume card ── indigo accent */}
-        <Card className="border-t-4 border-t-indigo-500/70 shadow-sm">
-          <CardHeader className="bg-gradient-to-r from-slate-50 to-indigo-50/60 dark:from-slate-800/50 dark:to-indigo-950/30 rounded-t-[calc(var(--radius-lg)-1px)]">
-            <CardTitle className="text-slate-700 dark:text-slate-200">Curated Resume</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <CuratedResume
-              completion={curatedResumeCompletion}
-              isLoading={curatedResumeLoading}
-              jobDescription={jobDescription}
-            />
-          </CardContent>
-        </Card>
       </div>
+
+      {/* ── Row 2: Resume Curator / Evaluator — full width ── */}
+      <Card className="border-t-4 border-t-indigo-500/70 shadow-sm">
+        <CardHeader className="bg-gradient-to-r from-slate-50 to-indigo-50/60 dark:from-slate-800/50 dark:to-indigo-950/30 rounded-t-[calc(var(--radius-lg)-1px)]">
+          <CardTitle className="text-slate-700 dark:text-slate-200">Resume Curator</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-6">
+          {/* Generation progress */}
+          {resumePhase !== "idle" && (
+            <>
+              <ResumeProgress
+                phase={resumePhase}
+                currentAttempt={currentAttempt}
+                maxAttempts={MAX_GENERATION_ATTEMPTS}
+                history={attemptHistory}
+              />
+              <Separator />
+            </>
+          )}
+
+          {/* Final evaluation detail — shown after all attempts complete */}
+          {evaluationResult && resumePhase === "done" && (
+            <>
+              <ResumeEvaluation evaluation={evaluationResult} isLoading={false} />
+              <Separator />
+            </>
+          )}
+
+          {/* Curated resume output */}
+          <CuratedResume
+            completion={finalCuratedResume}
+            isLoading={curatedResumeLoading || resumePhase === "curating" || resumePhase === "evaluating"}
+            jobDescription={jobDescription}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

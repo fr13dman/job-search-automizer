@@ -157,4 +157,22 @@ describe("buildCurateResumePrompt", () => {
     const result = buildCurateResumePrompt("Resume", "Job");
     expect(result.system).toContain("Skills section");
   });
+
+  it("includes evaluation feedback in user prompt when provided", () => {
+    const feedback = "Hallucination: Added MIT degree\nMissing: Docker";
+    const result = buildCurateResumePrompt("Resume", "Job", feedback);
+    expect(result.user).toContain("Previous Attempt Feedback");
+    expect(result.user).toContain("Added MIT degree");
+    expect(result.user).toContain("Docker");
+  });
+
+  it("does not include feedback section when evaluationFeedback is omitted", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.user).not.toContain("Previous Attempt Feedback");
+  });
+
+  it("does not include feedback section when evaluationFeedback is undefined", () => {
+    const result = buildCurateResumePrompt("Resume", "Job", undefined);
+    expect(result.user).not.toContain("Previous Attempt Feedback");
+  });
 });
