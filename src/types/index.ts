@@ -37,3 +37,19 @@ export interface PdfMetadata {
   companyName?: string;
   jobTitle?: string;
 }
+
+export interface ResumeEvaluation {
+  atsScore: number;
+  keywordMatches: string[];
+  missingKeywords: string[];
+  hallucinationsFound: boolean;
+  hallucinationDetails: string[];
+  overallAssessment: string;
+}
+
+export interface AttemptRecord {
+  attempt: number;
+  evaluation: ResumeEvaluation | null;
+  passed: boolean;
+  evaluationError?: string;
+}

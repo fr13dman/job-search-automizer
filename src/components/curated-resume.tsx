@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { buildResumeFilename } from "@/lib/extract-metadata";
+import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
 
 interface CuratedResumeProps {
   completion: string;
@@ -88,7 +89,7 @@ export function CuratedResume({ completion, isLoading, jobDescription = "" }: Cu
         data-testid="curated-resume-output"
         className="font-mono text-sm leading-relaxed whitespace-pre-wrap rounded-md border bg-muted/30 p-4 min-h-[120px]"
       >
-        {completion.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+        {stripNonBoldMarkdown(completion).split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
           part.startsWith("**") && part.endsWith("**") ? (
             <strong key={i}>{part.slice(2, -2)}</strong>
           ) : (

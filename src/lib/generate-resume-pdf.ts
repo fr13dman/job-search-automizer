@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
 
 type TextSegment = { text: string; bold: boolean };
 
@@ -33,7 +34,7 @@ export async function downloadResumePdf(
   filename = "curated-resume.pdf"
 ): Promise<void> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const lines = resumeText.split("\n");
+  const lines = stripNonBoldMarkdown(resumeText).split("\n");
   let y = MARGIN;
   const maxY = PAGE_HEIGHT - MARGIN;
 

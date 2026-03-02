@@ -6,27 +6,25 @@ import { toast } from "sonner";
 // Mock useCompletion from @ai-sdk/react
 const mockComplete = vi.fn();
 const mockCompleteRecommendations = vi.fn();
+const mockStopCurateResume = vi.fn();
 let mockCompletion = "";
 let mockIsLoading = false;
 let mockError: Error | null = null;
 let mockCuratedResumeCompletion = "";
 let mockCuratedResumeLoading = false;
-let capturedCurateOnFinish: ((prompt: string, completion: string) => void) | undefined;
 
 vi.mock("@ai-sdk/react", () => ({
   useCompletion: ({
     api,
-    onFinish,
   }: {
     api: string;
-    onFinish?: (prompt: string, completion: string) => void;
   }) => {
     if (api === "/api/curate-resume") {
-      capturedCurateOnFinish = onFinish;
       return {
         completion: mockCuratedResumeCompletion,
         isLoading: mockCuratedResumeLoading,
         complete: mockCompleteRecommendations,
+        stop: mockStopCurateResume,
         error: null,
       };
     }
@@ -34,6 +32,7 @@ vi.mock("@ai-sdk/react", () => ({
       completion: mockCompletion,
       isLoading: mockIsLoading,
       complete: mockComplete,
+      stop: vi.fn(),
       error: mockError,
     };
   },
@@ -53,7 +52,6 @@ describe("Integration tests", () => {
     mockError = null;
     mockCuratedResumeCompletion = "";
     mockCuratedResumeLoading = false;
-    capturedCurateOnFinish = undefined;
   });
 
   it("full flow: mock scrape + mock parse + mock generate → cover letter appears", async () => {
@@ -115,9 +113,7 @@ describe("Integration tests", () => {
     });
 
     // Step 3: Generate button should now be enabled
-    const generateBtn = screen.getByRole("button", {
-      name: /generate cover letter/i,
-    });
+    const generateBtn = screen.getByTestId("generate-btn");
     expect(generateBtn).not.toBeDisabled();
   });
 
@@ -181,15 +177,13 @@ describe("Integration tests", () => {
 
     // Generate should be enabled
     expect(
-      screen.getByRole("button", { name: /generate cover letter/i })
+      screen.getByTestId("generate-btn")
     ).not.toBeDisabled();
   });
 
   it("generate button disabled until both inputs are provided", () => {
     render(<Home />);
-    const btn = screen.getByRole("button", {
-      name: /generate cover letter/i,
-    });
+    const btn = screen.getByTestId("generate-btn");
     expect(btn).toBeDisabled();
   });
 
@@ -198,10 +192,9 @@ describe("Integration tests", () => {
     expect(screen.getByLabelText(/additional instructions/i)).toBeInTheDocument();
   });
 
-  it("curated resume card is present on page", () => {
+  it("resume curator card is present on page", () => {
     render(<Home />);
-    // Card title is exact text; placeholder is a longer string — use exact match to avoid ambiguity
-    expect(screen.getByText("Curated Resume")).toBeInTheDocument();
+    expect(screen.getByText("Resume Curator")).toBeInTheDocument();
   });
 
   it("curated resume placeholder is shown before generation", () => {
@@ -240,7 +233,7 @@ describe("Integration tests", () => {
     await waitFor(() => expect(screen.getByText(/resume parsed successfully/i)).toBeInTheDocument());
 
     // Generate
-    await user.click(screen.getByRole("button", { name: /generate cover letter/i }));
+    await user.click(screen.getByTestId("generate-btn"));
 
     expect(mockComplete).toHaveBeenCalledOnce();
     expect(mockCompleteRecommendations).toHaveBeenCalledOnce();
@@ -280,7 +273,7 @@ describe("Integration tests", () => {
       "Emphasize leadership"
     );
 
-    await user.click(screen.getByRole("button", { name: /generate cover letter/i }));
+    await user.click(screen.getByTestId("generate-btn"));
 
     expect(mockComplete).toHaveBeenCalledWith(
       "",
@@ -290,18 +283,158 @@ describe("Integration tests", () => {
     );
   });
 
-  it("shows curated resume completion text when streamed", () => {
-    mockCuratedResumeCompletion = "EXPERIENCE\n- Led backend team";
+  it("shows curated resume text after evaluation completes", async () => {
+    const user = userEvent.setup();
+
+    mockFetch.mockImplementation(async (url: string, opts?: RequestInit) => {
+      if (url === "/api/scrape") {
+        return { ok: true, json: async () => ({ success: true, jobDescription: "Engineer role" }) };
+      }
+      if (url === "/api/parse-resume") {
+        return { ok: true, json: async () => ({ success: true, resumeText: "Jane Doe resume" }) };
+      }
+      if (url === "/api/evaluate-resume") {
+        return {
+          ok: true,
+          json: async () => ({
+            atsScore: 88,
+            keywordMatches: ["React"],
+            missingKeywords: [],
+            hallucinationsFound: false,
+            hallucinationDetails: [],
+            overallAssessment: "Excellent match.",
+          }),
+        };
+      }
+      return { ok: false, json: async () => ({}) };
+    });
+
+    mockComplete.mockResolvedValue(undefined);
+    mockCompleteRecommendations.mockResolvedValue("EXPERIENCE\n- Led backend team");
+
     render(<Home />);
-    expect(screen.getByText(/EXPERIENCE/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/job posting url/i), "https://example.com/job");
+    await user.click(screen.getByRole("button", { name: /fetch/i }));
+    await waitFor(() => expect(screen.getByText(/job description loaded/i)).toBeInTheDocument());
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(["resume"], "resume.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(screen.getByText(/resume parsed successfully/i)).toBeInTheDocument());
+
+    await user.click(screen.getByTestId("generate-btn"));
+
+    await waitFor(() => {
+      const output = screen.getByTestId("curated-resume-output");
+      expect(output.textContent).toContain("EXPERIENCE");
+    });
   });
 
-  it("shows toast success when curated resume generation completes", () => {
+  it("shows toast success only after evaluation passes", async () => {
+    const user = userEvent.setup();
     const toastSpy = vi.spyOn(toast, "success").mockImplementation(() => ({} as never));
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === "/api/scrape") return { json: async () => ({ success: true, jobDescription: "Engineer role" }) };
+      if (url === "/api/parse-resume") return { json: async () => ({ success: true, resumeText: "Jane Doe resume" }) };
+      if (url === "/api/evaluate-resume") return {
+        ok: true,
+        json: async () => ({
+          atsScore: 88,
+          keywordMatches: ["React"],
+          missingKeywords: [],
+          hallucinationsFound: false,
+          hallucinationDetails: [],
+          overallAssessment: "Excellent match.",
+        }),
+      };
+      return { ok: false, json: async () => ({}) };
+    });
+
+    mockComplete.mockResolvedValue(undefined);
+    mockCompleteRecommendations.mockResolvedValue("EXPERIENCE\n- Led backend team");
+
     render(<Home />);
-    capturedCurateOnFinish?.("", "EXPERIENCE\n- Led backend team");
-    expect(toastSpy).toHaveBeenCalledWith("Resume curated!");
+
+    await user.type(screen.getByLabelText(/job posting url/i), "https://example.com/job");
+    await user.click(screen.getByRole("button", { name: /fetch/i }));
+    await waitFor(() => expect(screen.getByText(/job description loaded/i)).toBeInTheDocument());
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(["resume"], "resume.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(screen.getByText(/resume parsed successfully/i)).toBeInTheDocument());
+
+    await user.click(screen.getByTestId("generate-btn"));
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith("Resume curated!");
+    });
+
     toastSpy.mockRestore();
+  });
+
+  it("does not show 'Resume curated!' toast when evaluation fails", async () => {
+    const user = userEvent.setup();
+    const toastSpy = vi.spyOn(toast, "success").mockImplementation(() => ({} as never));
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === "/api/scrape") return { json: async () => ({ success: true, jobDescription: "Engineer role" }) };
+      if (url === "/api/parse-resume") return { json: async () => ({ success: true, resumeText: "Jane Doe resume" }) };
+      if (url === "/api/evaluate-resume") return {
+        ok: true,
+        json: async () => ({
+          atsScore: 50,
+          keywordMatches: [],
+          missingKeywords: ["React"],
+          hallucinationsFound: true,
+          hallucinationDetails: ["MIT degree not in original resume"],
+          overallAssessment: "Hallucinations detected.",
+        }),
+      };
+      return { ok: false, json: async () => ({}) };
+    });
+
+    mockComplete.mockResolvedValue(undefined);
+    mockCompleteRecommendations.mockResolvedValue("EXPERIENCE\n- Led backend team");
+
+    render(<Home />);
+
+    await user.type(screen.getByLabelText(/job posting url/i), "https://example.com/job");
+    await user.click(screen.getByRole("button", { name: /fetch/i }));
+    await waitFor(() => expect(screen.getByText(/job description loaded/i)).toBeInTheDocument());
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(["resume"], "resume.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(screen.getByText(/resume parsed successfully/i)).toBeInTheDocument());
+
+    await user.click(screen.getByTestId("generate-btn"));
+
+    // Wait for all 3 attempts to complete
+    await waitFor(() => {
+      expect(screen.getAllByText("Failed")).toHaveLength(3);
+    });
+
+    expect(toastSpy).not.toHaveBeenCalledWith("Resume curated!");
+    toastSpy.mockRestore();
+  });
+
+  it("cancel button is not shown when not busy", () => {
+    render(<Home />);
+    expect(screen.queryByTestId("cancel-btn")).not.toBeInTheDocument();
+  });
+
+  it("cancel button appears while resume curation is loading", () => {
+    mockCuratedResumeLoading = true;
+    render(<Home />);
+    expect(screen.getByTestId("cancel-btn")).toBeInTheDocument();
+  });
+
+  it("clicking cancel calls stop on the curate stream", async () => {
+    const user = userEvent.setup();
+    mockCuratedResumeLoading = true;
+    render(<Home />);
+    await user.click(screen.getByTestId("cancel-btn"));
+    expect(mockStopCurateResume).toHaveBeenCalledOnce();
   });
 
   it("stream interruption: partial text remains visible and exportable", async () => {

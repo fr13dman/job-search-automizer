@@ -153,4 +153,30 @@ describe("POST /api/curate-resume", () => {
     expect(res.status).toBe(400);
     expect(data.error).toContain("required");
   });
+
+  it("includes evaluationFeedback in the user message when provided", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Jane Doe, Developer",
+        jobDescription: "Backend Engineer at Startup",
+        evaluationFeedback: "Remove mention of Python — not in original resume",
+      })
+    );
+
+    const call = vi.mocked(streamText).mock.calls[0][0];
+    expect(call.messages[0].content).toContain("Previous Attempt Feedback");
+    expect(call.messages[0].content).toContain("Remove mention of Python");
+  });
+
+  it("omits the feedback section when evaluationFeedback is not provided", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Jane Doe, Developer",
+        jobDescription: "Backend Engineer at Startup",
+      })
+    );
+
+    const call = vi.mocked(streamText).mock.calls[0][0];
+    expect(call.messages[0].content).not.toContain("Previous Attempt Feedback");
+  });
 });
