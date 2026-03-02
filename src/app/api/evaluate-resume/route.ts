@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
     const model = "claude-sonnet-4-5-20250929";
     console.log("[/api/evaluate-resume] Calling generateObject", {
       model,
-      mode: "tool",
       truncatedResumeLength: Math.min(resumeText.length, MAX_INPUT_LENGTH),
       truncatedJobLength: Math.min(jobDescription.length, MAX_INPUT_LENGTH),
       truncatedCuratedLength: Math.min(curatedResume.length, MAX_INPUT_LENGTH),
@@ -63,9 +62,8 @@ export async function POST(request: NextRequest) {
 
     const { object } = await generateObject({
       model: anthropic(model),
-      mode: "tool",
       schema: EvaluationSchema,
-      maxTokens: 1500,
+      maxOutputTokens: 1500,
       system: `You are an expert ATS analyst and resume accuracy reviewer. You will receive three inputs:
 1. The candidate's ORIGINAL resume
 2. A job description

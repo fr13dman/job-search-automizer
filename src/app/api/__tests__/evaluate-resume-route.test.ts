@@ -165,7 +165,7 @@ describe("POST /api/evaluate-resume", () => {
     expect(checks.some((c) => c.kind === "max")).toBe(false);
   });
 
-  it("calls generateObject with mode: 'tool'", async () => {
+  it("calls generateObject with the configured model", async () => {
     await POST(
       makeRequest({
         resumeText: "Resume",
@@ -174,8 +174,10 @@ describe("POST /api/evaluate-resume", () => {
       })
     );
 
-    const call = vi.mocked(generateObject).mock.calls[0][0] as { mode: string };
-    expect(call.mode).toBe("tool");
+    expect(generateObject).toHaveBeenCalledOnce();
+    // model is passed as the return value of anthropic(modelId)
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { model: string };
+    expect(call.model).toBe("mock-model");
   });
 
   it("returns 500 with details field when generateObject throws", async () => {
