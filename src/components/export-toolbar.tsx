@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Copy, Check, FileDown, FileText } from "lucide-react";
 import { downloadPdf } from "@/lib/generate-pdf";
-import { extractMetadata, buildPdfFilename } from "@/lib/extract-metadata";
+import { downloadDocx } from "@/lib/generate-docx";
+import { extractMetadata, buildPdfFilename, buildCoverLetterDocxFilename } from "@/lib/extract-metadata";
 import { toast } from "sonner";
 
 interface ExportToolbarProps {
@@ -18,6 +20,7 @@ function stripMarkdownBold(text: string): string {
 
 export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbarProps) {
   const [copied, setCopied] = useState(false);
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState(false);
 
   async function handleCopy() {
     try {
@@ -38,23 +41,51 @@ export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbar
     toast.success("PDF downloaded");
   }
 
+  async function handleDownloadDocx() {
+    setIsDownloadingDocx(true);
+    try {
+      const metadata = extractMetadata(text, jobDescription);
+      const filename = buildCoverLetterDocxFilename(metadata);
+      await downloadDocx(text, filename);
+      toast.success("DOCX downloaded");
+    } catch {
+      toast.error("Failed to download DOCX");
+    } finally {
+      setIsDownloadingDocx(false);
+    }
+  }
+
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-1">
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        size="icon"
         onClick={handleCopy}
         disabled={isLoading || !text}
+        aria-label={copied ? "Copied!" : "Copy"}
+        title={copied ? "Copied!" : "Copy to clipboard"}
       >
-        {copied ? "Copied!" : "Copy"}
+        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
       </Button>
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        size="icon"
+        onClick={handleDownloadDocx}
+        disabled={isLoading || !text || isDownloadingDocx}
+        aria-label="Download DOCX"
+        title="Download as Word document"
+      >
+        <FileText className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={handleDownloadPdf}
         disabled={isLoading || !text}
+        aria-label="Download PDF"
+        title="Download as PDF"
       >
-        Download PDF
+        <FileDown className="h-4 w-4" />
       </Button>
     </div>
   );

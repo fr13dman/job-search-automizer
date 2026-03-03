@@ -54,7 +54,7 @@ describe("CoverLetterOutput", () => {
     expect(preview.className).toContain("font-mono");
   });
 
-  it("renders bold markdown as highlighted text in preview", () => {
+  it("strips bold markdown and renders plain text in preview (no mark tags)", () => {
     const { rerender } = render(
       <CoverLetterOutput
         completion="I **increased revenue by 40%** at my last role."
@@ -71,9 +71,11 @@ describe("CoverLetterOutput", () => {
       />
     );
 
-    const mark = screen.getByText("increased revenue by 40%");
-    expect(mark.tagName).toBe("MARK");
-    expect(mark.className).toContain("font-bold");
+    const preview = screen.getByTestId("rich-preview");
+    expect(preview.textContent).toContain("increased revenue by 40%");
+    expect(preview.querySelector("mark")).toBeNull();
+    // No ** markers visible
+    expect(preview.textContent).not.toContain("**");
   });
 
   it("switches to raw editor when Edit button is clicked", async () => {

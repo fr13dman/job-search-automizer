@@ -11,25 +11,13 @@ interface CoverLetterOutputProps {
 }
 
 function RichPreview({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  const plainText = text.replace(/\*\*([^*]+)\*\*/g, "$1");
   return (
     <div
       className="font-mono text-sm leading-relaxed whitespace-pre-wrap rounded-md border bg-muted/30 p-4 min-h-[300px]"
       data-testid="rich-preview"
     >
-      {parts.map((part, i) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return (
-            <mark
-              key={i}
-              className="bg-yellow-200 dark:bg-yellow-900 text-foreground font-bold px-0.5 rounded"
-            >
-              {part.slice(2, -2)}
-            </mark>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
+      {plainText}
     </div>
   );
 }

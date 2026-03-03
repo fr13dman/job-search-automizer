@@ -7,9 +7,14 @@ vi.mock("@/lib/generate-pdf", () => ({
   downloadPdf: vi.fn(),
 }));
 
+vi.mock("@/lib/generate-docx", () => ({
+  downloadDocx: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("@/lib/extract-metadata", () => ({
   extractMetadata: vi.fn(() => ({ candidateName: "Test", companyName: "Co" })),
-  buildPdfFilename: vi.fn(() => "Cover-Letter_Co_2026.pdf"),
+  buildPdfFilename: vi.fn(() => "co-test-cover-letter.pdf"),
+  buildCoverLetterDocxFilename: vi.fn(() => "co-test-cover-letter.docx"),
 }));
 
 const writeText = vi.fn().mockResolvedValue(undefined);
@@ -68,14 +73,30 @@ describe("ExportToolbar", () => {
     expect(downloadPdf).toHaveBeenCalledWith(
       "Some text",
       { candidateName: "Test", companyName: "Co" },
-      "Cover-Letter_Co_2026.pdf"
+      "co-test-cover-letter.pdf"
     );
   });
 
-  it("both buttons are disabled when isLoading is true", () => {
+  it("Download DOCX button is present and calls downloadDocx", async () => {
+    const user = userEvent.setup();
+    const { downloadDocx } = await import("@/lib/generate-docx");
+
+    render(<ExportToolbar text="Some text" jobDescription="Job desc" isLoading={false} />);
+
+    const btn = screen.getByRole("button", { name: /download docx/i });
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+
+    await waitFor(() => {
+      expect(downloadDocx).toHaveBeenCalledWith("Some text", "co-test-cover-letter.docx");
+    });
+  });
+
+  it("all three buttons are disabled when isLoading is true", () => {
     render(<ExportToolbar text="Some text" jobDescription="Job desc" isLoading={true} />);
 
     expect(screen.getByRole("button", { name: /copy/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /download docx/i })).toBeDisabled();
     expect(
       screen.getByRole("button", { name: /download pdf/i })
     ).toBeDisabled();

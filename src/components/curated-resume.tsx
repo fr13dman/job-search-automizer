@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FileDown, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { buildResumeFilename } from "@/lib/extract-metadata";
 import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
@@ -67,20 +68,24 @@ export function CuratedResume({ completion, isLoading, jobDescription = "" }: Cu
         {!isLoading && completion && (
           <>
             <Button
-              size="sm"
-              variant="outline"
+              variant="ghost"
+              size="icon"
               onClick={handleDownloadDocx}
               disabled={isAnyDownloading}
+              aria-label={isDownloadingDocx ? "Downloading..." : "Download DOCX"}
+              title="Download as Word document"
             >
-              {isDownloadingDocx ? "Downloading..." : "Download DOCX"}
+              <FileText className="h-4 w-4" />
             </Button>
             <Button
-              size="sm"
-              variant="outline"
+              variant="ghost"
+              size="icon"
               onClick={handleDownloadPdf}
               disabled={isAnyDownloading}
+              aria-label={isDownloadingPdf ? "Downloading..." : "Download PDF"}
+              title="Download as PDF"
             >
-              {isDownloadingPdf ? "Downloading..." : "Download PDF"}
+              <FileDown className="h-4 w-4" />
             </Button>
           </>
         )}

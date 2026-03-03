@@ -67,44 +67,54 @@ function extractCompanyName(coverLetter: string, jobDescription: string): string
  * Extract job title from job description first, then fall back to cover letter.
  */
 function extractJobTitle(coverLetter: string, jobDescription: string): string | undefined {
-  // Try job description first
-  const jdPatterns = [
-    // "Job Title: Software Engineer" or "Position: Senior Developer"
-    /(?:job\s+title|position|role)\s*[:]\s*([^\n]+)/i,
-    // First line of JD is often the title (if short enough)
-    /^([A-Z][A-Za-z /,()-]+)(?:\n|$)/,
-  ];
-
-  for (const pattern of jdPatterns) {
-    const match = jobDescription.match(pattern);
-    if (match) {
-      const title = match[1].trim();
-      // Must look like a job title (not too long, not too short)
-      if (title.length >= 3 && title.length <= 60) {
-        return title;
+  // Try cover letter FIRST when available. Claude's generated text reliably names the
+  // job title in structured phrases. Scraped JD text is unreliable: ATS pages
+  // (Greenhouse, Lever, etc.) prepend navigation text ("Back to jobs") and location
+  // lists that corrupt first-line extraction.
+  if (coverLetter) {
+    const clPatterns = [
+      // "for the Software Engineer position" / "for the Software Engineer role"
+      /for\s+the\s+([A-Z][A-Za-z /()-]+?)\s+(?:position|role|opening|opportunity)/i,
+      // "the Software Engineer position" (without "for")
+      /\bthe\s+([A-Z][A-Za-z /()-]+?)\s+(?:position|role|opening|opportunity)\b/i,
+      // "role of Senior Developer" / "position of Lead Engineer"
+      /(?:role|position)\s+(?:of|as)\s+(?:a\s+|an\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|,|\.))/i,
+      // "as a Software Engineer at/to/in/..."  — extended stop words cover more Claude phrasings
+      /as\s+(?:a\s+|an\s+|your\s+(?:next\s+)?)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|to|in|on|,|\.|\band\b|\bwho\b|\bwhere\b|\bresponsible\b))/i,
+      // "applying for Software Engineer" / "interest in the Software Engineer"
+      /(?:applying\s+for|interest\s+in)\s+(?:the\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:position|role|opening|opportunity|at|with))/i,
+    ];
+    for (const pattern of clPatterns) {
+      const match = coverLetter.match(pattern);
+      if (match) {
+        const title = match[1].trim();
+        if (title.length >= 3 && title.length <= 60) return title;
       }
     }
   }
 
-  // Fall back to cover letter patterns
-  const clPatterns = [
-    // "for the Software Engineer position" / "for the Software Engineer role"
-    /for\s+the\s+([A-Z][A-Za-z /()-]+?)\s+(?:position|role|opening|opportunity)/i,
-    // "role of Senior Developer" / "position of Lead Engineer"
-    /(?:role|position)\s+(?:of|as)\s+(?:a\s+|an\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|,|\.))/i,
-    // "as a Software Engineer" / "as your next Senior Developer"
-    /as\s+(?:a\s+|an\s+|your\s+(?:next\s+)?)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|,|\.|\band\b))/i,
-    // "applying for Software Engineer" / "interest in the Software Engineer"
-    /(?:applying\s+for|interest\s+in)\s+(?:the\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:position|role|opening|opportunity|at|with))/i,
+  // JD fallback — strip common ATS navigation prefixes before pattern matching.
+  // Greenhouse, Lever, etc. embed "← Back to jobs" links inside <main> which
+  // Cheerio extracts as text, corrupting first-line extraction.
+  const cleanJD = jobDescription
+    .replace(/^[←→\s]*back\s+to\s+jobs?\s*/i, "")
+    .trim();
+
+  const jdPatterns = [
+    // "Job Title: Software Engineer" or "Position: Senior Developer"
+    /(?:job\s+title|position|role)\s*[:]\s*([^\n,|·•]+)/i,
+    // First line of multi-line JD (e.g. copy-pasted text with newlines)
+    /^([A-Z][A-Za-z /,()-]+)(?=\n)/,
+    // First segment before · • – — separators used in scraped single-line text
+    // (NOT | which appears in location lists: "United States | Canada | UK")
+    /^([A-Z][A-Za-z /,()-]+?)(?:\s*[·•–—]|$)/,
   ];
 
-  for (const pattern of clPatterns) {
-    const match = coverLetter.match(pattern);
+  for (const pattern of jdPatterns) {
+    const match = cleanJD.match(pattern);
     if (match) {
       const title = match[1].trim();
-      if (title.length >= 3 && title.length <= 60) {
-        return title;
-      }
+      if (title.length >= 3 && title.length <= 60) return title;
     }
   }
 
@@ -129,43 +139,46 @@ function slugify(s: string): string {
 }
 
 /**
- * Build a filename for the curated resume using candidate name, job title, and company.
- * Format: {candidate-name}-{job-title}-{company}-resume  (no extension)
+ * Build a filename for the curated resume using company, job title, and candidate name.
+ * Format: {company}-{job-title}-{candidate-name}-resume  (no extension)
  */
 export function buildResumeFilename(resumeText: string, jobDescription: string): string {
   // Candidate name: first non-empty line that starts with a letter and is not an ALL-CAPS heading
   const nameLine =
     resumeText
       .split("\n")
-      .map((l) => l.trim())
+      .map((l) => l.trim().replace(/\*\*/g, ""))
       .find((l) => l.length > 0 && /^[A-Za-z]/.test(l) && l !== l.toUpperCase()) ?? "";
-  const candidateName = nameLine.replace(/[^a-zA-Z0-9 '-]+/g, "").trim();
+  // Stop at the first digit, pipe, @, or other contact-info separator so phone
+  // numbers and email addresses are never included in the candidate name.
+  const nameSegment = nameLine.split(/[\d|@·•\/\\;]|(?:https?:\/\/)/)[0];
+  const candidateName = nameSegment.replace(/[^a-zA-Z '-]+/g, " ").replace(/\s+/g, " ").trim();
 
   const companyName = extractCompanyName("", jobDescription);
   const jobTitle = extractJobTitle("", jobDescription);
 
   const parts: string[] = [];
-  if (candidateName) parts.push(slugify(candidateName));
-  if (jobTitle) parts.push(slugify(jobTitle));
   if (companyName) parts.push(slugify(companyName));
+  if (jobTitle) parts.push(slugify(jobTitle));
+  if (candidateName) parts.push(slugify(candidateName));
   parts.push("resume");
 
   return parts.join("-");
 }
 
+function buildCoverLetterBasename(metadata: PdfMetadata): string {
+  const parts: string[] = [];
+  if (metadata.companyName) parts.push(slugify(metadata.companyName));
+  if (metadata.jobTitle) parts.push(slugify(metadata.jobTitle));
+  if (metadata.candidateName) parts.push(slugify(metadata.candidateName));
+  parts.push("cover-letter");
+  return parts.join("-");
+}
+
 export function buildPdfFilename(metadata: PdfMetadata): string {
-  const year = new Date().getFullYear();
-  const parts: string[] = ["Cover-Letter"];
+  return buildCoverLetterBasename(metadata) + ".pdf";
+}
 
-  if (metadata.companyName) {
-    parts.push(metadata.companyName.replace(/[^a-zA-Z0-9]+/g, "-"));
-  }
-
-  if (metadata.jobTitle) {
-    parts.push(metadata.jobTitle.replace(/[^a-zA-Z0-9]+/g, "-"));
-  }
-
-  parts.push(String(year));
-
-  return parts.join("_") + ".pdf";
+export function buildCoverLetterDocxFilename(metadata: PdfMetadata): string {
+  return buildCoverLetterBasename(metadata) + ".docx";
 }

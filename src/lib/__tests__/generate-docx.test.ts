@@ -166,4 +166,23 @@ describe("downloadDocx", () => {
     expect(boldRun).toBeDefined();
     expect(boldRun![0].text).toBe("Senior Engineer");
   });
+
+  it("creates bold TextRun for __curated text__ double-underscore segments", async () => {
+    await downloadDocx("- __optimized pipeline__ for cloud deployment");
+
+    const boldRun = vi.mocked(TextRun).mock.calls.find(
+      ([opts]) => opts && typeof opts === "object" && opts.bold === true
+    );
+    expect(boldRun).toBeDefined();
+    expect(boldRun![0].text).toBe("optimized pipeline");
+  });
+
+  it("strips bare __ markers that are not part of a matched pair", async () => {
+    await downloadDocx("Contact: __email@example.com");
+
+    const anyUnderscoreText = vi.mocked(TextRun).mock.calls.find(
+      ([opts]) => opts && typeof opts === "string" && (opts as string).includes("__")
+    );
+    expect(anyUnderscoreText).toBeUndefined();
+  });
 });

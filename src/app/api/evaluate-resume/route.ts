@@ -73,6 +73,10 @@ Perform three independent checks:
 
 HALLUCINATION CHECK: Compare the curated resume line by line against the original. Flag any skill, technology, tool, company name, school name, degree, job title, achievement, metric, or date that appears in the curated resume but cannot be found in or reasonably inferred from the original resume. Even subtle substitutions (e.g. a different university, a slightly inflated metric, a tool not mentioned) must be flagged. Be thorough.
 
+EDUCATION INTEGRITY: School names, degree names (e.g. "Bachelor of Science"), graduation years, and majors must match the original resume verbatim. Any deviation — even a synonymous institution name or partial degree name — must be flagged.
+
+METRICS INTEGRITY: Any numeric achievement (e.g. "increased revenue by 40%", "managed team of 12") must appear in the original resume with the same number. Do not allow paraphrasing of metrics; they are either exact or hallucinated.
+
 ATS KEYWORD ANALYSIS: Extract all important keywords, skills, technologies, methodologies, and role-relevant phrases from the job description. For each, check whether it appears (verbatim or as a clear synonym) in the curated resume. Report matches and gaps separately.
 
 ATS SCORE: Based on keyword coverage, presence of action verbs, quantified achievements, and formatting clarity, assign an integer score from 0–100 representing how well the resume would perform in an ATS scan for this specific job.`,
