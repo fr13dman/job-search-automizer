@@ -76,6 +76,59 @@ We are looking for a Senior Software Engineer to join our platform team...`;
     expect(result.companyName).toBeUndefined();
     expect(result.jobTitle).toBeUndefined();
   });
+
+  it("extracts job title from collapsed single-line JD (scraped text with · separators)", () => {
+    // When no cover letter mention, JD fallback uses · as separator
+    const jd = "Software Engineer · Acme Corp · San Francisco, CA · Full-time About the job We are looking for...";
+    const result = extractMetadata("Dear Hiring Manager,\n\nSincerely,\nJohn Doe", jd);
+    expect(result.jobTitle).toBe("Software Engineer");
+  });
+
+  it("extracts job title from collapsed JD with em-dash separator", () => {
+    const jd = "Backend Engineer – Acme Corp – New York";
+    const result = extractMetadata("Dear Hiring Manager,\n\nSincerely,\nJohn Doe", jd);
+    expect(result.jobTitle).toBe("Backend Engineer");
+  });
+
+  it("cover letter takes priority over JD for job title extraction", () => {
+    // Even when JD has | separators that could hint at structure, the cover letter
+    // is preferred because | also appears in location lists, making it unreliable.
+    const letter = "I am applying for the Senior Data Scientist position at Stripe.\n\nSincerely,\nJane Smith";
+    const jd = "Senior Data Scientist | Stripe | Remote | Full-time";
+    const result = extractMetadata(letter, jd);
+    expect(result.jobTitle).toBe("Senior Data Scientist");
+  });
+
+  it("uses cover letter to extract title correctly for Greenhouse JD with navigation text", () => {
+    // Greenhouse pages embed "Back to jobs" inside <main>. Cheerio concatenates
+    // adjacent DOM elements without whitespace ("Back to jobsDirector..."). The cover
+    // letter is tried first and extracts the clean title from Claude's generated text.
+    const letter = "I am excited to apply for the Director of Platform Engineering position at Overstory.\n\nSincerely,\nJohn Doe";
+    const jd = "Back to jobsDirector of Platform EngineeringUnited States | Canada | United Kingdom Apply The climate crisis is the defining challenge...";
+    const result = extractMetadata(letter, jd);
+    expect(result.jobTitle).toBe("Director of Platform Engineering");
+  });
+
+  it("strips 'Back to jobs' from JD when cover letter gives no match (JD fallback)", () => {
+    // If a cover letter has no recognisable title phrasing, the JD fallback
+    // strips the navigation prefix before matching.
+    const letter = "Dear Hiring Manager,\n\nSincerely,\nJohn Doe";
+    const jd = "Back to jobs Director of Platform Engineering · Overstory · United States";
+    const result = extractMetadata(letter, jd);
+    expect(result.jobTitle).toBe("Director of Platform Engineering");
+  });
+
+  it("extracts job title from cover letter 'the X position' (without 'for')", () => {
+    const letter = "I am thrilled about the Product Manager position and believe my background aligns perfectly.\n\nSincerely,\nJane Smith";
+    const result = extractMetadata(letter, "We are looking for someone great.");
+    expect(result.jobTitle).toBe("Product Manager");
+  });
+
+  it("extracts job title from cover letter 'as a X to join' phrasing", () => {
+    const letter = "I am eager to join Acme Corp as a Senior Software Engineer to help scale the platform.\n\nSincerely,\nJohn Doe";
+    const result = extractMetadata(letter, "We are looking for someone great.");
+    expect(result.jobTitle).toBe("Senior Software Engineer");
+  });
 });
 
 describe("buildPdfFilename", () => {

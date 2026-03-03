@@ -67,44 +67,54 @@ function extractCompanyName(coverLetter: string, jobDescription: string): string
  * Extract job title from job description first, then fall back to cover letter.
  */
 function extractJobTitle(coverLetter: string, jobDescription: string): string | undefined {
-  // Try job description first
-  const jdPatterns = [
-    // "Job Title: Software Engineer" or "Position: Senior Developer"
-    /(?:job\s+title|position|role)\s*[:]\s*([^\n]+)/i,
-    // First line of JD is often the title (if short enough)
-    /^([A-Z][A-Za-z /,()-]+)(?:\n|$)/,
-  ];
-
-  for (const pattern of jdPatterns) {
-    const match = jobDescription.match(pattern);
-    if (match) {
-      const title = match[1].trim();
-      // Must look like a job title (not too long, not too short)
-      if (title.length >= 3 && title.length <= 60) {
-        return title;
+  // Try cover letter FIRST when available. Claude's generated text reliably names the
+  // job title in structured phrases. Scraped JD text is unreliable: ATS pages
+  // (Greenhouse, Lever, etc.) prepend navigation text ("Back to jobs") and location
+  // lists that corrupt first-line extraction.
+  if (coverLetter) {
+    const clPatterns = [
+      // "for the Software Engineer position" / "for the Software Engineer role"
+      /for\s+the\s+([A-Z][A-Za-z /()-]+?)\s+(?:position|role|opening|opportunity)/i,
+      // "the Software Engineer position" (without "for")
+      /\bthe\s+([A-Z][A-Za-z /()-]+?)\s+(?:position|role|opening|opportunity)\b/i,
+      // "role of Senior Developer" / "position of Lead Engineer"
+      /(?:role|position)\s+(?:of|as)\s+(?:a\s+|an\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|,|\.))/i,
+      // "as a Software Engineer at/to/in/..."  — extended stop words cover more Claude phrasings
+      /as\s+(?:a\s+|an\s+|your\s+(?:next\s+)?)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|to|in|on|,|\.|\band\b|\bwho\b|\bwhere\b|\bresponsible\b))/i,
+      // "applying for Software Engineer" / "interest in the Software Engineer"
+      /(?:applying\s+for|interest\s+in)\s+(?:the\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:position|role|opening|opportunity|at|with))/i,
+    ];
+    for (const pattern of clPatterns) {
+      const match = coverLetter.match(pattern);
+      if (match) {
+        const title = match[1].trim();
+        if (title.length >= 3 && title.length <= 60) return title;
       }
     }
   }
 
-  // Fall back to cover letter patterns
-  const clPatterns = [
-    // "for the Software Engineer position" / "for the Software Engineer role"
-    /for\s+the\s+([A-Z][A-Za-z /()-]+?)\s+(?:position|role|opening|opportunity)/i,
-    // "role of Senior Developer" / "position of Lead Engineer"
-    /(?:role|position)\s+(?:of|as)\s+(?:a\s+|an\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|,|\.))/i,
-    // "as a Software Engineer" / "as your next Senior Developer"
-    /as\s+(?:a\s+|an\s+|your\s+(?:next\s+)?)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:at|with|for|,|\.|\band\b))/i,
-    // "applying for Software Engineer" / "interest in the Software Engineer"
-    /(?:applying\s+for|interest\s+in)\s+(?:the\s+)?([A-Z][A-Za-z /()-]+?)(?:\s+(?:position|role|opening|opportunity|at|with))/i,
+  // JD fallback — strip common ATS navigation prefixes before pattern matching.
+  // Greenhouse, Lever, etc. embed "← Back to jobs" links inside <main> which
+  // Cheerio extracts as text, corrupting first-line extraction.
+  const cleanJD = jobDescription
+    .replace(/^[←→\s]*back\s+to\s+jobs?\s*/i, "")
+    .trim();
+
+  const jdPatterns = [
+    // "Job Title: Software Engineer" or "Position: Senior Developer"
+    /(?:job\s+title|position|role)\s*[:]\s*([^\n,|·•]+)/i,
+    // First line of multi-line JD (e.g. copy-pasted text with newlines)
+    /^([A-Z][A-Za-z /,()-]+)(?=\n)/,
+    // First segment before · • – — separators used in scraped single-line text
+    // (NOT | which appears in location lists: "United States | Canada | UK")
+    /^([A-Z][A-Za-z /,()-]+?)(?:\s*[·•–—]|$)/,
   ];
 
-  for (const pattern of clPatterns) {
-    const match = coverLetter.match(pattern);
+  for (const pattern of jdPatterns) {
+    const match = cleanJD.match(pattern);
     if (match) {
       const title = match[1].trim();
-      if (title.length >= 3 && title.length <= 60) {
-        return title;
-      }
+      if (title.length >= 3 && title.length <= 60) return title;
     }
   }
 
