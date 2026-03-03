@@ -9,14 +9,17 @@ import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
 
 function inlineBoldRuns(text: string): TextRun[] {
   return text
-    .split(/(\*\*[^*]+\*\*)/g)
+    .split(/(\*\*[^*]+\*\*|__[^_\n]+__)/g)
     .filter((p) => p)
     .map((part) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         return new TextRun({ text: part.slice(2, -2), bold: true });
       }
-      // Strip any bare ** that weren't part of a matched bold pair
-      return new TextRun({ text: part.replace(/\*\*/g, "") });
+      if (part.startsWith("__") && part.endsWith("__")) {
+        return new TextRun({ text: part.slice(2, -2), bold: true });
+      }
+      // Strip any bare ** or __ that weren't part of a matched pair
+      return new TextRun({ text: part.replace(/\*\*/g, "").replace(/__/g, "") });
     });
 }
 

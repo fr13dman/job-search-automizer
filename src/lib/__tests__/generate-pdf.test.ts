@@ -42,40 +42,20 @@ describe("downloadPdf", () => {
     mockSplitTextToSize.mockImplementation((text: string) => [text]);
   });
 
-  it("renders header with candidate name when provided", () => {
+  it("does not render a candidate name header", () => {
     downloadPdf("Hello world", { candidateName: "John Doe" });
 
-    // Should render the candidate name in the header
-    expect(mockText).toHaveBeenCalledWith(
-      "John Doe",
-      expect.any(Number),
-      expect.any(Number)
+    // No 18pt font call — header removed
+    const size18Call = mockSetFontSize.mock.calls.find(
+      (call: unknown[]) => call[0] === 18
     );
-    expect(mockSetFontSize).toHaveBeenCalledWith(18); // HEADER_FONT_SIZE
+    expect(size18Call).toBeUndefined();
   });
 
-  it("renders sub-header with job title, company, and date", () => {
-    downloadPdf("Body text", {
-      candidateName: "Jane Smith",
-      companyName: "Acme Corp",
-      jobTitle: "Software Engineer",
-    });
-
-    // Sub-header should contain job title, company, and date joined by " | "
-    const subHeaderCall = mockText.mock.calls.find(
-      (call: unknown[]) =>
-        typeof call[0] === "string" && call[0].includes("Acme Corp")
-    );
-    expect(subHeaderCall).toBeDefined();
-    expect(subHeaderCall[0]).toContain("Software Engineer");
-    expect(subHeaderCall[0]).toMatch(/\d{4}/); // year
-  });
-
-  it("draws a divider line between header and body", () => {
+  it("does not draw a divider line", () => {
     downloadPdf("Body text", { candidateName: "John" });
-
-    expect(mockLine).toHaveBeenCalled();
-    expect(mockSetDrawColor).toHaveBeenCalledWith(200, 200, 200);
+    expect(mockLine).not.toHaveBeenCalled();
+    expect(mockSetDrawColor).not.toHaveBeenCalled();
   });
 
   it("renders body text with paragraph spacing", () => {
@@ -94,14 +74,50 @@ describe("downloadPdf", () => {
     expect(bodyTextCalls.length).toBe(3);
   });
 
-  it("renders bold segments with bold font", () => {
+  it("strips bold markers and renders body as plain text", () => {
     downloadPdf("I **achieved 40% growth** in revenue.");
 
-    const boldCalls = mockSetFont.mock.calls.filter(
+    // Bold font should NOT be called for body text
+    const boldBodyCalls = mockSetFont.mock.calls.filter(
       (call: unknown[]) => call[1] === "bold"
     );
-    // At least one bold call for the header-less mode (still has header bold) plus the inline bold
-    expect(boldCalls.length).toBeGreaterThanOrEqual(1);
+    expect(boldBodyCalls.length).toBe(0);
+
+    // The text should be rendered without ** markers
+    const textCall = mockText.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === "string" && call[0].includes("achieved 40% growth")
+    );
+    expect(textCall).toBeDefined();
+    expect(textCall![0]).not.toContain("**");
+  });
+
+  it("renders the last line of each paragraph left-aligned", () => {
+    mockSplitTextToSize.mockImplementation((text: string) => [text]);
+    downloadPdf("Single line paragraph.");
+
+    const textCall = mockText.mock.calls.find(
+      (call: unknown[]) =>
+        typeof call[0] === "string" && call[0].includes("Single line")
+    );
+    expect(textCall).toBeDefined();
+    // Last (only) line: align=left
+    expect(textCall![3]).toMatchObject({ align: "left" });
+  });
+
+  it("renders non-last lines of a paragraph as justified", () => {
+    mockSplitTextToSize.mockImplementation((text: string) => [
+      "First wrapped line of text",
+      "Last line",
+    ]);
+    downloadPdf("Some long paragraph text.");
+
+    const justifiedCall = mockText.mock.calls.find(
+      (call: unknown[]) =>
+        typeof call[0] === "string" &&
+        call[0].includes("First wrapped") &&
+        call[3]?.align === "justify"
+    );
+    expect(justifiedCall).toBeDefined();
   });
 
   it("saves with provided filename", () => {

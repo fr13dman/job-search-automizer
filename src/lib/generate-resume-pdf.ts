@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
+import { stripNonBoldMarkdown, stripCuratedMarkers } from "@/lib/clean-markdown";
 
 type TextSegment = { text: string; bold: boolean };
 
@@ -24,8 +24,10 @@ const PAGE_HEIGHT = 297; // A4 mm
 const MAX_WIDTH = PAGE_WIDTH - MARGIN * 2; // 186 mm usable width
 const HEADING_FONT_SIZE = 10; // pt — was 12
 const BODY_FONT_SIZE = 8.5; // pt — was 10
+const NAME_FONT_SIZE = BODY_FONT_SIZE + 5; // 13.5pt — candidate name + position header
 const LINE_HEIGHT_HEADING = 5; // mm — was 7
 const LINE_HEIGHT_BODY = 4.5; // mm — was 5.5
+const LINE_HEIGHT_NAME = 7; // mm — larger leading for name/position lines
 const BULLET_INDENT = 4; // mm — was 5
 const BLANK_LINE_SPACING = 2; // mm — was 3
 
@@ -34,9 +36,13 @@ export async function downloadResumePdf(
   filename = "curated-resume.pdf"
 ): Promise<void> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const lines = stripNonBoldMarkdown(resumeText).split("\n");
+  const lines = stripNonBoldMarkdown(stripCuratedMarkers(resumeText)).split("\n");
   let y = MARGIN;
   const maxY = PAGE_HEIGHT - MARGIN;
+
+  // Track the first two non-empty header lines (name + position) before any section
+  let headerLinesRendered = 0;
+  let firstSectionSeen = false;
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
@@ -52,6 +58,7 @@ export async function downloadResumePdf(
       /[A-Za-z]/.test(trimmed) &&
       trimmed === trimmed.toUpperCase()
     ) {
+      firstSectionSeen = true;
       if (y + LINE_HEIGHT_HEADING > maxY) {
         doc.addPage();
         y = MARGIN;
@@ -115,7 +122,25 @@ export async function downloadResumePdf(
       continue;
     }
 
-    // Normal text (name, contact info, role titles, dates, etc.)
+    // Header lines: first 2 non-empty lines before any section heading (name + position)
+    if (!firstSectionSeen && headerLinesRendered < 2) {
+      const cleanText = trimmed.replace(/\*\*/g, "");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(NAME_FONT_SIZE);
+      const nameLines: string[] = doc.splitTextToSize(cleanText, MAX_WIDTH);
+      for (const nl of nameLines) {
+        if (y + LINE_HEIGHT_NAME > maxY) {
+          doc.addPage();
+          y = MARGIN;
+        }
+        doc.text(nl, MARGIN, y);
+        y += LINE_HEIGHT_NAME;
+      }
+      headerLinesRendered++;
+      continue;
+    }
+
+    // Normal text (contact info, role titles, dates, etc.)
     doc.setFont("helvetica", "normal");
     doc.setFontSize(BODY_FONT_SIZE);
     const segments = parseInlineBold(trimmed);

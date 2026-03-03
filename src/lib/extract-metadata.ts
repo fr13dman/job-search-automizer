@@ -129,43 +129,46 @@ function slugify(s: string): string {
 }
 
 /**
- * Build a filename for the curated resume using candidate name, job title, and company.
- * Format: {candidate-name}-{job-title}-{company}-resume  (no extension)
+ * Build a filename for the curated resume using company, job title, and candidate name.
+ * Format: {company}-{job-title}-{candidate-name}-resume  (no extension)
  */
 export function buildResumeFilename(resumeText: string, jobDescription: string): string {
   // Candidate name: first non-empty line that starts with a letter and is not an ALL-CAPS heading
   const nameLine =
     resumeText
       .split("\n")
-      .map((l) => l.trim())
+      .map((l) => l.trim().replace(/\*\*/g, ""))
       .find((l) => l.length > 0 && /^[A-Za-z]/.test(l) && l !== l.toUpperCase()) ?? "";
-  const candidateName = nameLine.replace(/[^a-zA-Z0-9 '-]+/g, "").trim();
+  // Stop at the first digit, pipe, @, or other contact-info separator so phone
+  // numbers and email addresses are never included in the candidate name.
+  const nameSegment = nameLine.split(/[\d|@·•\/\\;]|(?:https?:\/\/)/)[0];
+  const candidateName = nameSegment.replace(/[^a-zA-Z '-]+/g, " ").replace(/\s+/g, " ").trim();
 
   const companyName = extractCompanyName("", jobDescription);
   const jobTitle = extractJobTitle("", jobDescription);
 
   const parts: string[] = [];
-  if (candidateName) parts.push(slugify(candidateName));
-  if (jobTitle) parts.push(slugify(jobTitle));
   if (companyName) parts.push(slugify(companyName));
+  if (jobTitle) parts.push(slugify(jobTitle));
+  if (candidateName) parts.push(slugify(candidateName));
   parts.push("resume");
 
   return parts.join("-");
 }
 
+function buildCoverLetterBasename(metadata: PdfMetadata): string {
+  const parts: string[] = [];
+  if (metadata.companyName) parts.push(slugify(metadata.companyName));
+  if (metadata.jobTitle) parts.push(slugify(metadata.jobTitle));
+  if (metadata.candidateName) parts.push(slugify(metadata.candidateName));
+  parts.push("cover-letter");
+  return parts.join("-");
+}
+
 export function buildPdfFilename(metadata: PdfMetadata): string {
-  const year = new Date().getFullYear();
-  const parts: string[] = ["Cover-Letter"];
+  return buildCoverLetterBasename(metadata) + ".pdf";
+}
 
-  if (metadata.companyName) {
-    parts.push(metadata.companyName.replace(/[^a-zA-Z0-9]+/g, "-"));
-  }
-
-  if (metadata.jobTitle) {
-    parts.push(metadata.jobTitle.replace(/[^a-zA-Z0-9]+/g, "-"));
-  }
-
-  parts.push(String(year));
-
-  return parts.join("_") + ".pdf";
+export function buildCoverLetterDocxFilename(metadata: PdfMetadata): string {
+  return buildCoverLetterBasename(metadata) + ".docx";
 }

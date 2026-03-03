@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
+import { stripNonBoldMarkdown, stripCuratedMarkers } from "@/lib/clean-markdown";
 
 describe("stripNonBoldMarkdown", () => {
   it("returns plain text unchanged", () => {
@@ -81,5 +81,37 @@ describe("stripNonBoldMarkdown", () => {
     expect(output).not.toContain("*Led*");
     expect(output).toContain("Led");
     expect(output).not.toContain("---");
+  });
+});
+
+describe("stripCuratedMarkers", () => {
+  it("removes __ delimiters while keeping inner text", () => {
+    expect(stripCuratedMarkers("__optimized pipeline__")).toBe("optimized pipeline");
+  });
+
+  it("preserves surrounding text", () => {
+    expect(stripCuratedMarkers("Led __cloud migration__ for three teams")).toBe(
+      "Led cloud migration for three teams"
+    );
+  });
+
+  it("handles multiple curated markers in one string", () => {
+    expect(stripCuratedMarkers("__built__ scalable __microservices__")).toBe(
+      "built scalable microservices"
+    );
+  });
+
+  it("does not touch **bold** markers", () => {
+    expect(stripCuratedMarkers("**Senior Engineer** at __Acme Corp__")).toBe(
+      "**Senior Engineer** at Acme Corp"
+    );
+  });
+
+  it("returns plain text unchanged", () => {
+    expect(stripCuratedMarkers("No markers here")).toBe("No markers here");
+  });
+
+  it("does not strip single-underscore italic patterns", () => {
+    expect(stripCuratedMarkers("_italic_")).toBe("_italic_");
   });
 });

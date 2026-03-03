@@ -105,7 +105,7 @@ describe("POST /api/curate-resume", () => {
     expect(call.messages[0].content).toContain("No preamble");
   });
 
-  it("system prompt enforces 2-page maximum", async () => {
+  it("system prompt enforces 5 bullet point limit per role", async () => {
     await POST(
       makeRequest({
         resumeText: "Resume",
@@ -114,7 +114,7 @@ describe("POST /api/curate-resume", () => {
     );
 
     const call = vi.mocked(streamText).mock.calls[0][0];
-    expect(call.system).toContain("2 pages");
+    expect(call.system).toContain("5 bullet points");
   });
 
   it("system prompt instructs ATS optimization with keywords", async () => {

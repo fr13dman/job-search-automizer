@@ -94,6 +94,34 @@ describe("POST /api/evaluate-resume", () => {
     expect(call.system.toLowerCase()).toContain("hallucination");
   });
 
+  it("system prompt contains EDUCATION INTEGRITY rule", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
+    expect(call.system).toContain("EDUCATION INTEGRITY");
+    expect(call.system.toLowerCase()).toContain("school names");
+  });
+
+  it("system prompt contains METRICS INTEGRITY rule", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
+    expect(call.system).toContain("METRICS INTEGRITY");
+    expect(call.system.toLowerCase()).toContain("numeric achievement");
+  });
+
   it("returns 400 when resumeText is missing", async () => {
     const res = await POST(
       makeRequest({ jobDescription: "Some job", curatedResume: "Some resume" })

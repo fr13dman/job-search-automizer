@@ -133,14 +133,25 @@ describe("buildCurateResumePrompt", () => {
     expect(result.system).toContain("reorder");
   });
 
+  it("system prompt requires accomplishments as bullet points", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Accomplishments format");
+    expect(result.system).toContain("bullet points");
+  });
+
+  it("system prompt includes consolidation rule for bullets", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("consolidate");
+  });
+
   it("user prompt instructs to return only resume with no preamble", () => {
     const result = buildCurateResumePrompt("Resume", "Job");
     expect(result.user).toContain("No preamble");
   });
 
-  it("system prompt enforces 2-page maximum", () => {
+  it("system prompt enforces 5 bullet point limit per role", () => {
     const result = buildCurateResumePrompt("Resume", "Job");
-    expect(result.system).toContain("2 pages");
+    expect(result.system).toContain("5 bullet points");
   });
 
   it("system prompt instructs ATS optimization", () => {
@@ -174,5 +185,62 @@ describe("buildCurateResumePrompt", () => {
   it("does not include feedback section when evaluationFeedback is undefined", () => {
     const result = buildCurateResumePrompt("Resume", "Job", undefined);
     expect(result.user).not.toContain("Previous Attempt Feedback");
+  });
+
+  it("system prompt includes Yale OCS bullet writing framework", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Yale OCS");
+    expect(result.system).toContain("Action verb");
+  });
+
+  it("system prompt requires ranking bullets by job relevance", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("descending relevance");
+  });
+
+  it("system prompt requires quantification of results", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Quantify");
+  });
+
+  it("system prompt prohibits weasel words like 'leveraged' and 'utilized'", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("leveraged");
+    expect(result.system).toContain("utilized");
+    expect(result.system).toContain("spearheaded");
+  });
+
+  it("system prompt includes language quality rule with action verbs", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Language quality");
+    expect(result.system).toContain("action verbs");
+  });
+
+  it("system prompt includes curated phrase __ marker rule", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("__curated text__");
+    expect(result.system).toContain("__double underscores__");
+  });
+
+  it("system prompt includes content preservation rule (no silent drops)", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Content preservation");
+    expect(result.system).toContain("silently dropped");
+  });
+
+  it("system prompt includes 'Accomplished [X] as measured by [Y] by doing [Z]' pattern", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Accomplished [X] as measured by [Y] by doing [Z]");
+  });
+
+  it("system prompt prohibits passive team verbs like 'Worked on' and 'Helped with'", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Worked on");
+    expect(result.system).toContain("Helped with");
+  });
+
+  it("system prompt requires individual contribution framing", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("individual contribution");
   });
 });

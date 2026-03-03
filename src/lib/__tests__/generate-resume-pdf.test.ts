@@ -139,8 +139,44 @@ describe("downloadResumePdf", () => {
     expect(mockSave).toHaveBeenCalledOnce();
   });
 
-  it("renders inline **bold** segments with bold font", async () => {
-    await downloadResumePdf("**Senior Engineer** — Acme Corp | 2022–Present");
+  it("renders the first line (candidate name) bold with larger font", async () => {
+    await downloadResumePdf("John Doe\nSoftware Engineer\n\nEXPERIENCE");
+
+    // NAME_FONT_SIZE = 13.5 (BODY 8.5 + 5)
+    const nameFontSizeCall = mockSetFontSize.mock.calls.find(
+      (call: unknown[]) => call[0] === 8.5 + 5
+    );
+    expect(nameFontSizeCall).toBeDefined();
+
+    const nameTextCall = mockText.mock.calls.find(
+      (call: unknown[]) => call[0] === "John Doe"
+    );
+    expect(nameTextCall).toBeDefined();
+  });
+
+  it("renders the second line (position) bold with larger font", async () => {
+    await downloadResumePdf("John Doe\nSoftware Engineer\n\nEXPERIENCE");
+
+    const positionTextCall = mockText.mock.calls.find(
+      (call: unknown[]) => call[0] === "Software Engineer"
+    );
+    expect(positionTextCall).toBeDefined();
+  });
+
+  it("renders only the first 2 lines as header (3rd line uses normal font)", async () => {
+    await downloadResumePdf("John Doe\nSoftware Engineer\njohn@email.com\n\nEXPERIENCE");
+
+    // Contact line should NOT use NAME_FONT_SIZE
+    const nameFontSizeCalls = mockSetFontSize.mock.calls.filter(
+      (call: unknown[]) => call[0] === 8.5 + 5
+    );
+    // Should only be called twice (for the 2 header lines)
+    expect(nameFontSizeCalls.length).toBe(2);
+  });
+
+  it("renders inline **bold** segments with bold font inside experience section", async () => {
+    // Provide a section heading first so the bold line is NOT treated as a header line
+    await downloadResumePdf("EXPERIENCE\n**Senior Engineer** — Acme Corp | 2022–Present");
 
     const boldFontCall = mockSetFont.mock.calls.find(
       (call: unknown[]) => call[0] === "helvetica" && call[1] === "bold"
@@ -153,8 +189,9 @@ describe("downloadResumePdf", () => {
     expect(boldTextCall).toBeDefined();
   });
 
-  it("renders the non-bold segment of a mixed line with normal font", async () => {
-    await downloadResumePdf("**Lead Dev** at Corp");
+  it("renders the non-bold segment of a mixed line with normal font inside experience section", async () => {
+    // Provide a section heading first so the bold line is NOT treated as a header line
+    await downloadResumePdf("EXPERIENCE\n**Lead Dev** at Corp");
 
     const normalAfterBold = mockSetFont.mock.calls.find(
       (call: unknown[]) => call[0] === "helvetica" && call[1] === "normal"

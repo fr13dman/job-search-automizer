@@ -1,4 +1,12 @@
 /**
+ * Strip __curated text__ double-underscore markers while preserving the inner text.
+ * Used before PDF rendering so curated phrases appear as plain text.
+ */
+export function stripCuratedMarkers(text: string): string {
+  return text.replace(/__([^_\n]+)__/g, "$1");
+}
+
+/**
  * Strip common markdown syntax from resume text while preserving **bold** markers
  * (which are used for role/position emphasis and handled by the renderers).
  */
