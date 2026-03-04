@@ -132,13 +132,13 @@ We are looking for a Senior Software Engineer to join our platform team...`;
 });
 
 describe("buildPdfFilename", () => {
-  it("builds filename with all metadata in company-position-candidate order", () => {
+  it("builds filename with company and position (no candidate name)", () => {
     const result = buildPdfFilename({
       companyName: "Acme Corp",
       jobTitle: "Software Engineer",
       candidateName: "Jane Doe",
     });
-    expect(result).toBe("acme-corp-software-engineer-jane-doe-cover-letter.pdf");
+    expect(result).toBe("acme-corp-software-engineer-cover-letter.pdf");
   });
 
   it("builds filename with only company", () => {
@@ -158,13 +158,13 @@ describe("buildPdfFilename", () => {
 });
 
 describe("buildCoverLetterDocxFilename", () => {
-  it("builds DOCX filename with all metadata in company-position-candidate order", () => {
+  it("builds DOCX filename with company and position (no candidate name)", () => {
     const result = buildCoverLetterDocxFilename({
       companyName: "Acme Corp",
       jobTitle: "Software Engineer",
       candidateName: "Jane Doe",
     });
-    expect(result).toBe("acme-corp-software-engineer-jane-doe-cover-letter.docx");
+    expect(result).toBe("acme-corp-software-engineer-cover-letter.docx");
   });
 
   it("builds DOCX filename with only company", () => {
@@ -179,11 +179,11 @@ describe("buildCoverLetterDocxFilename", () => {
 });
 
 describe("buildResumeFilename", () => {
-  it("orders parts as company-position-candidate-resume", () => {
+  it("orders parts as company-position-resume (no candidate name)", () => {
     const resume = "John Doe\nSoftware Engineer\nExperience...";
     const jd = "Senior Engineer\nCompany: Acme Corp";
     const result = buildResumeFilename(resume, jd);
-    expect(result).toBe("acme-corp-senior-engineer-john-doe-resume");
+    expect(result).toBe("acme-corp-senior-engineer-resume");
   });
 
   it("always ends with 'resume'", () => {
@@ -191,25 +191,25 @@ describe("buildResumeFilename", () => {
     expect(result).toBe("resume");
   });
 
-  it("uses only job description for company and position when resume has no name", () => {
+  it("extracts company and position from job description", () => {
     const resume = "SKILLS\n- TypeScript";
     const jd = "Job Title: Data Analyst\nCompany: Meta";
     const result = buildResumeFilename(resume, jd);
     expect(result).toBe("meta-data-analyst-resume");
   });
 
-  it("skips all-caps first lines (section headings) when finding candidate name", () => {
+  it("returns only 'resume' when job description has no extractable company or title", () => {
     const resume = "EXPERIENCE\nJane Smith\n- Built systems";
     const jd = "";
     const result = buildResumeFilename(resume, jd);
-    expect(result).toContain("jane-smith");
+    expect(result).toBe("resume");
   });
 
-  it("slugifies special characters in candidate name", () => {
+  it("returns only 'resume' when job description is empty", () => {
     const resume = "O'Brien, Mary-Kate\nSoftware Lead";
     const jd = "";
     const result = buildResumeFilename(resume, jd);
-    expect(result).toMatch(/^o-brien-mary-kate-resume$|^obrien-mary-kate-resume$/);
+    expect(result).toBe("resume");
   });
 
   it("omits empty parts and does not produce double hyphens", () => {
@@ -217,58 +217,54 @@ describe("buildResumeFilename", () => {
     const jd = ""; // no extractable company/title
     const result = buildResumeFilename(resume, jd);
     expect(result).not.toMatch(/--/);
-    expect(result).toBe("alice-johnson-resume");
+    expect(result).toBe("resume");
   });
 
-  it("strips ** bold markers from name line before extraction", () => {
+  it("extracts company and position regardless of resume content", () => {
     const resume = "**John Doe**\nSoftware Engineer";
     const jd = "Senior Engineer\nCompany: Acme Corp";
     const result = buildResumeFilename(resume, jd);
-    expect(result).toContain("john-doe");
-    expect(result).toBe("acme-corp-senior-engineer-john-doe-resume");
+    expect(result).toBe("acme-corp-senior-engineer-resume");
   });
 
-  it("excludes phone number when name and phone are on the same line separated by pipe", () => {
+  it("uses job description only — resume contact details do not affect filename", () => {
     const resume = "John Doe | 555-123-4567 | john@email.com\nSoftware Engineer";
     const jd = "Senior Engineer\nCompany: Acme Corp";
     const result = buildResumeFilename(resume, jd);
     expect(result).not.toContain("555");
-    expect(result).not.toContain("email");  // email domain
-    expect(result).toContain("john-doe");
-    expect(result).toBe("acme-corp-senior-engineer-john-doe-resume");
+    expect(result).not.toContain("john-doe");
+    expect(result).toBe("acme-corp-senior-engineer-resume");
   });
 
-  it("excludes phone number when it appears on the same line as the name", () => {
+  it("extracts position from JD 'Data Analyst' field", () => {
     const resume = "Jane Smith 555-987-6543\nData Analyst";
     const jd = "Data Analyst\nCompany: Meta";
     const result = buildResumeFilename(resume, jd);
     expect(result).not.toContain("555");
-    expect(result).not.toContain("987");
-    expect(result).toContain("jane-smith");
-    expect(result).toBe("meta-data-analyst-jane-smith-resume");
+    expect(result).not.toContain("jane-smith");
+    expect(result).toBe("meta-data-analyst-resume");
   });
 
-  it("excludes email address when name and email are on the same line", () => {
+  it("uses company from JD when present", () => {
     const resume = "Alice Johnson | alice@example.com\nSoftware Lead";
     const jd = "Company: Stripe";
     const result = buildResumeFilename(resume, jd);
-    expect(result).not.toContain("alice-example");
-    expect(result).not.toContain("com");
-    expect(result).toContain("alice-johnson");
+    expect(result).not.toContain("alice-johnson");
+    expect(result).toBe("stripe-resume");
   });
 
-  it("handles inline contact header with all info on one line", () => {
+  it("handles inline contact header — only JD data used for filename", () => {
     const resume = "Bob Lee | bob@email.com | +1-800-555-0199 | linkedin.com/in/boblee\nSenior Developer";
     const jd = "Company: Acme Corp\nJob Title: Senior Developer";
     const result = buildResumeFilename(resume, jd);
-    expect(result).toBe("acme-corp-senior-developer-bob-lee-resume");
+    expect(result).toBe("acme-corp-senior-developer-resume");
   });
 
-  it("full pipeline: company-position-candidate-resume with all parts present", () => {
+  it("full pipeline: company-position-resume with all JD parts present", () => {
     const resume = "Jane Smith\nFrontend Developer\n\nSKILLS\nReact, TypeScript";
     const jd = "Software Engineer\nCompany: Stripe\n\nWe are looking for an engineer...";
     const result = buildResumeFilename(resume, jd);
-    expect(result).toBe("stripe-software-engineer-jane-smith-resume");
+    expect(result).toBe("stripe-software-engineer-resume");
   });
 
   it("no trailing or leading hyphens in any filename", () => {

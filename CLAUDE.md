@@ -13,22 +13,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-This is a **Next.js 16 App Router** application that generates tailored cover letters using Claude AI. Single-page app with three API routes.
+This is a **Next.js 16 App Router** application that generates tailored cover letters and curated resumes using Claude AI. Single-page app with five API routes.
 
 ### Data Flow
 
+**Cover Letter:**
 1. User provides a job posting URL → **`/api/scrape`** fetches HTML and extracts text via Cheerio (`src/lib/scrape-job.ts`)
 2. User uploads a resume (PDF/DOCX) → **`/api/parse-resume`** extracts text via pdf-parse or mammoth (`src/lib/parse-resume.ts`)
 3. User selects a tone and clicks generate → **`/api/generate`** streams a cover letter from `claude-sonnet-4-5-20250929` using Vercel AI SDK (`@ai-sdk/anthropic` + `ai` `streamText`)
-4. Output is editable, can be copied (markdown bold stripped) or exported as a styled PDF via jsPDF (`src/lib/generate-pdf.ts`)
+4. Output is editable, can be copied (markdown bold stripped) or exported as a styled PDF via jsPDF (`src/lib/generate-pdf.ts`) or DOCX via docx (`src/lib/generate-docx.ts`)
+
+**Resume Curation (agentic loop):**
+1. **`/api/curate-resume`** — Claude rewrites the resume tailored to the job, using `__curated text__` double-underscore markers around AI-added content
+2. **`/api/evaluate-resume`** — Claude scores the curated resume for ATS fit, keyword matches, hallucinations, etc., returning a `ResumeEvaluation` JSON object
+3. The client (`src/components/curated-resume.tsx`) runs up to 3 attempts: curate → evaluate → if score < threshold, curate again with feedback → repeat
+4. Final resume exports as PDF (`src/lib/generate-resume-pdf.ts`) or DOCX (`src/lib/generate-docx.ts`)
 
 ### Key Conventions
 
 - **Streaming**: The generate endpoint uses `streamText` → `toTextStreamResponse()`. The client uses `useCompletion` from `@ai-sdk/react` with `streamProtocol: "text"`.
 - **Prompt engineering**: All prompt logic lives in `src/lib/prompt.ts` — system prompt + user prompt built from `buildPrompt()`. Inputs are truncated to 8,000 chars.
 - **Bold formatting**: The AI outputs `**bold**` markdown for key achievements. This is rendered as highlighted `<mark>` tags in preview, rendered as bold in PDF, and stripped on clipboard copy.
-- **PDF metadata extraction**: `src/lib/extract-metadata.ts` uses regex patterns to pull candidate name, company name, and job title from the cover letter and job description to build the PDF filename and header.
-- **Types**: Shared types in `src/types/index.ts` — `Tone`, `ScrapeResult`, `ParseResumeResult`, `GenerateRequest`, `PdfMetadata`.
+- **Curated markers**: The resume curation prompt uses `__curated text__` double-underscore markers. `stripCuratedMarkers` in `src/lib/clean-markdown.ts` strips them for PDF; `inlineBoldRuns` in `src/lib/generate-docx.ts` renders them as bold in DOCX.
+- **PDF metadata extraction**: `src/lib/extract-metadata.ts` uses regex patterns to pull candidate name, company name, and job title from the cover letter and job description to build the PDF filename and header. Filename formats: `{company}-{position}-cover-letter.{ext}` and `{company}-{position}-resume`.
+- **Types**: Shared types in `src/types/index.ts` — `Tone`, `ScrapeResult`, `ParseResumeResult`, `GenerateRequest`, `PdfMetadata`, `ResumeEvaluation`, `AttemptRecord`.
 - **UI components**: shadcn/ui primitives in `src/components/ui/`, app components directly in `src/components/`.
 
 ### Test Setup
@@ -37,6 +45,7 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 - `environmentMatchGlobs` switches to `node` environment for `src/lib/__tests__/` and `src/app/api/__tests__/`
 - Test setup file: `src/test-setup.ts`
 - Tests co-located in `__tests__/` directories next to source files
+- **Known pre-existing failures**: `src/app/api/__tests__/parse-resume-route.test.ts` has 3 tests that fail unrelated to recent features — do not treat as regressions
 
 ### Notable Config
 
@@ -44,7 +53,7 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 
 ### Environment Variables
 
-- `ANTHROPIC_API_KEY` — required for the `/api/generate` endpoint (used by `@ai-sdk/anthropic`)
+- `ANTHROPIC_API_KEY` — required for `/api/generate`, `/api/curate-resume`, and `/api/evaluate-resume` (used by `@ai-sdk/anthropic`)
 
 ## Vercel Deployment
 

@@ -139,28 +139,16 @@ function slugify(s: string): string {
 }
 
 /**
- * Build a filename for the curated resume using company, job title, and candidate name.
- * Format: {company}-{job-title}-{candidate-name}-resume  (no extension)
+ * Build a filename for the curated resume using company and job title.
+ * Format: {company}-{job-title}-resume  (no extension)
  */
-export function buildResumeFilename(resumeText: string, jobDescription: string): string {
-  // Candidate name: first non-empty line that starts with a letter and is not an ALL-CAPS heading
-  const nameLine =
-    resumeText
-      .split("\n")
-      .map((l) => l.trim().replace(/\*\*/g, ""))
-      .find((l) => l.length > 0 && /^[A-Za-z]/.test(l) && l !== l.toUpperCase()) ?? "";
-  // Stop at the first digit, pipe, @, or other contact-info separator so phone
-  // numbers and email addresses are never included in the candidate name.
-  const nameSegment = nameLine.split(/[\d|@·•\/\\;]|(?:https?:\/\/)/)[0];
-  const candidateName = nameSegment.replace(/[^a-zA-Z '-]+/g, " ").replace(/\s+/g, " ").trim();
-
+export function buildResumeFilename(_resumeText: string, jobDescription: string): string {
   const companyName = extractCompanyName("", jobDescription);
   const jobTitle = extractJobTitle("", jobDescription);
 
   const parts: string[] = [];
   if (companyName) parts.push(slugify(companyName));
   if (jobTitle) parts.push(slugify(jobTitle));
-  if (candidateName) parts.push(slugify(candidateName));
   parts.push("resume");
 
   return parts.join("-");
@@ -170,7 +158,6 @@ function buildCoverLetterBasename(metadata: PdfMetadata): string {
   const parts: string[] = [];
   if (metadata.companyName) parts.push(slugify(metadata.companyName));
   if (metadata.jobTitle) parts.push(slugify(metadata.jobTitle));
-  if (metadata.candidateName) parts.push(slugify(metadata.candidateName));
   parts.push("cover-letter");
   return parts.join("-");
 }
