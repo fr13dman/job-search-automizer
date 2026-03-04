@@ -18,7 +18,7 @@ const EvaluationSchema = z.object({
   hallucinationsFound: z
     .boolean()
     .describe(
-      "True if any skill, technology, company, school, degree, date, or achievement in the curated resume cannot be verified against the original resume"
+      "True if ANY of the following: (1) an institution name in the curated education section differs from the original, (2) a degree level differs from the original, (3) a metric/number in an accomplishment bullet differs from the original, or (4) any skill, technology, company, or achievement cannot be verified against the original resume. When in doubt, set to true."
     ),
   hallucinationDetails: z
     .array(z.string())
@@ -69,13 +69,22 @@ export async function POST(request: NextRequest) {
 2. A job description
 3. A CURATED resume that was rewritten to match the job description
 
-Perform three independent checks:
+CRITICAL RULE: hallucinationsFound MUST be set to true if ANY single check below fails. Do not weigh severity — one failure = true. When uncertain, set to true. A false positive is far less harmful than a false negative.
+
+EDUCATION INTEGRITY CHECK (failure → hallucinationsFound: true):
+1. List every institution name from the ORIGINAL resume's education section (school names, universities, colleges).
+2. List every institution name from the CURATED resume's education section.
+3. If any institution in the curated resume does not exactly match one in the original — including abbreviations, alternate names, or synonyms — set hallucinationsFound to true and add to hallucinationDetails.
+4. List every degree level from the ORIGINAL (e.g. "Bachelor of Science", "Master of Arts", "PhD", "Associate").
+5. If the curated resume contains any degree level not present in the original — set hallucinationsFound to true and add to hallucinationDetails.
+6. Graduation years and majors/fields must also match exactly — any deviation is a failure.
+
+METRICS INTEGRITY CHECK (failure → hallucinationsFound: true):
+1. Extract every number, percentage, dollar amount, headcount, and duration (numeric achievement) from accomplishment bullets in the ORIGINAL resume (e.g. "40%", "$2M", "team of 12", "5,000 TPS", "99.99% uptime").
+2. For each numeric value in the CURATED resume's accomplishment bullets, confirm it appears with the exact same value in the original.
+3. If any metric in the curated resume has a different value than the original — even if rounded, approximated, or unit-converted — set hallucinationsFound to true and add to hallucinationDetails.
 
 HALLUCINATION CHECK: Compare the curated resume line by line against the original. Flag any skill, technology, tool, company name, school name, degree, job title, achievement, metric, or date that appears in the curated resume but cannot be found in or reasonably inferred from the original resume. Even subtle substitutions (e.g. a different university, a slightly inflated metric, a tool not mentioned) must be flagged. Be thorough.
-
-EDUCATION INTEGRITY: School names, degree names (e.g. "Bachelor of Science"), graduation years, and majors must match the original resume verbatim. Any deviation — even a synonymous institution name or partial degree name — must be flagged.
-
-METRICS INTEGRITY: Any numeric achievement (e.g. "increased revenue by 40%", "managed team of 12") must appear in the original resume with the same number. Do not allow paraphrasing of metrics; they are either exact or hallucinated.
 
 ATS KEYWORD ANALYSIS: Extract all important keywords, skills, technologies, methodologies, and role-relevant phrases from the job description. For each, check whether it appears (verbatim or as a clear synonym) in the curated resume. Report matches and gaps separately.
 

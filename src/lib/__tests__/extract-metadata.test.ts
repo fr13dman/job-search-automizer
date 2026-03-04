@@ -129,6 +129,35 @@ We are looking for a Senior Software Engineer to join our platform team...`;
     const result = extractMetadata(letter, "We are looking for someone great.");
     expect(result.jobTitle).toBe("Senior Software Engineer");
   });
+
+  it("extracts Paysafe / VP Payments Engineering from realistic scraped JD + cover letter", () => {
+    // Simulates scraped text from https://jobs.paysafe.com/job/Jacksonville-VP-Payments-Engineering-FL-32256/1362676600/
+    const paysafeJd = `VP Payments Engineering
+Jacksonville, FL, US 32256
+Full-time · Posted Feb 6, 2026
+
+About Paysafe
+Paysafe is a leading specialized payments platform with a purpose: to enable businesses and consumers to connect and transact seamlessly through our future-focused payment solutions.
+
+About the Role
+This is a high-visibility transformation role reporting directly to the SVP Payments Engineering. You will own the technical heart of Paysafe's Platform: authorization engine, payment gateway, intelligent routing, and real-time fraud detection.
+
+Requirements
+- 10+ years payments technology experience; 5+ years senior leadership
+- Experience with high-scale systems (5,000+ peak TPS, 99.99% uptime)
+- $300B+ annual payment volume experience preferred`;
+
+    const paysafeLetter = `Dear Hiring Manager,
+
+I am thrilled to apply for the VP Payments Engineering position at Paysafe. With 12 years leading high-scale payment infrastructure and a track record of building resilient authorization engines, I am confident I can drive the transformation you need.
+
+Sincerely,
+Jane Smith`;
+
+    const result = extractMetadata(paysafeLetter, paysafeJd);
+    expect(result.companyName).toBe("Paysafe");
+    expect(result.jobTitle).toBe("VP Payments Engineering");
+  });
 });
 
 describe("buildPdfFilename", () => {
@@ -154,6 +183,15 @@ describe("buildPdfFilename", () => {
   it("slugifies company name with special characters", () => {
     const result = buildPdfFilename({ companyName: "Acme & Corp", jobTitle: "Sr. Engineer" });
     expect(result).toBe("acme-corp-sr-engineer-cover-letter.pdf");
+  });
+
+  it("produces correct filename for Paysafe VP Payments Engineering", () => {
+    // Template: {company-name}-{position}-cover-letter
+    const result = buildPdfFilename({
+      companyName: "Paysafe",
+      jobTitle: "VP Payments Engineering",
+    });
+    expect(result).toBe("paysafe-vp-payments-engineering-cover-letter.pdf");
   });
 });
 
