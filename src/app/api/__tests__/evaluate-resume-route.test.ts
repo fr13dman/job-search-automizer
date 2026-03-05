@@ -122,6 +122,64 @@ describe("POST /api/evaluate-resume", () => {
     expect(call.system.toLowerCase()).toContain("numeric achievement");
   });
 
+  it("system prompt requires hallucinationsFound:true on any single failure", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
+    expect(call.system).toContain("CRITICAL RULE");
+    expect(call.system).toContain("one failure = true");
+  });
+
+  it("system prompt uses step-by-step institution comparison for education check", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
+    expect(call.system).toContain("List every institution name from the ORIGINAL");
+    expect(call.system).toContain("List every institution name from the CURATED");
+  });
+
+  it("system prompt uses step-by-step metric comparison", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
+    expect(call.system).toContain("Extract every number, percentage, dollar amount");
+    expect(call.system).toContain("exact same value in the original");
+  });
+
+  it("hallucinationsFound schema description covers education and metrics failure conditions", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { schema: { shape: Record<string, { description: string }> } };
+    const desc = call.schema.shape.hallucinationsFound.description;
+    expect(desc).toContain("institution name");
+    expect(desc).toContain("degree level");
+    expect(desc).toContain("metric");
+  });
+
   it("returns 400 when resumeText is missing", async () => {
     const res = await POST(
       makeRequest({ jobDescription: "Some job", curatedResume: "Some resume" })

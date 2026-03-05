@@ -84,6 +84,11 @@ Strict no-hallucination rule:
 - If a skill or technology appears in the job description but NOT in the resume, do NOT include it anywhere in the rewritten resume — not in Skills, not in bullet points, not as a soft mention.
 - Do not infer, assume, or extrapolate. If the resume does not explicitly state it, you cannot write it.
 
+Identity and education fields — copy verbatim, never alter:
+- Candidate name and contact block: transcribe character-for-character from the original resume. Do not reformat, abbreviate, or reorder the name, address, phone, email, or URLs.
+- Education: school name, degree name (e.g. "Bachelor of Science in Computer Science"), major/field of study, and graduation year or date range must be copied verbatim from the original. Never substitute a synonym, abbreviate, or rephrase an institution name, degree title, or field.
+- Numeric metrics: every quantified achievement (percentages, dollar amounts, headcounts, time durations, counts) must appear with the exact same number as in the original resume. No rounding, approximating, or paraphrasing of numbers is permitted.
+
 Content preservation: Every role, skill, and piece of education from the original resume must appear in the output. No experience, achievement, or credential may be silently dropped.
 
 Structure: Preserve all section headings from the original resume. You may reorder or reword bullet points within sections to better match the job description's language and priorities. Do not add new bullet points that aren't grounded in the original content.
@@ -101,6 +106,10 @@ Bullet writing standard (Yale OCS framework): Structure every bullet as: Action 
 Length: Two pages is a loose guideline, not a hard limit. Use as many pages as needed to retain all substantive content from the original resume.
 
 ATS optimization: Naturally incorporate relevant keywords and phrases from the job description throughout the resume — especially in the Skills section and experience bullet points. Only use keywords the candidate already has clear evidence for in their original resume. This ensures the resume ranks well in Applicant Tracking Systems without fabricating new skills.
+
+Skills inference from accomplishments: If a bullet point in the original resume explicitly names a tool, technology, programming language, platform, or methodology, you may add that skill to the Skills section even if it was not listed there already — the accomplishment provides direct evidence. Only add a skill that is directly and unambiguously named in at least one bullet point or existing Skills entry; never infer a skill from vague language.
+
+Summary section: Include a SUMMARY section immediately after the candidate's name and contact block. If the original resume already has a summary or professional profile, rewrite it to emphasize experience and skills most relevant to the target role. If the original has no summary section, write 2–4 sentences that introduce the candidate's years of experience, key domain strengths, and the most job-relevant skills — including any skills inferred from accomplishments under the rule above. The summary must remain grounded in the original resume (the no-hallucination rule still applies).
 
 Language quality: Use strong, specific action verbs (led, built, shipped, reduced, grew, designed, implemented, negotiated). Avoid vague filler words and clichés such as "leveraged", "utilized", "spearheaded", "synergized", "impactful", "passionate about", "results-driven", "detail-oriented". Every bullet should start with a concrete verb and describe a specific action or outcome.
 

@@ -13,13 +13,20 @@ let mockError: Error | null = null;
 let mockCuratedResumeCompletion = "";
 let mockCuratedResumeLoading = false;
 
+// Captured onError callbacks so tests can trigger them
+let capturedCoverLetterOnError: ((err: Error) => void) | undefined;
+let capturedCurateResumeOnError: ((err: Error) => void) | undefined;
+
 vi.mock("@ai-sdk/react", () => ({
   useCompletion: ({
     api,
+    onError,
   }: {
     api: string;
+    onError?: (err: Error) => void;
   }) => {
     if (api === "/api/curate-resume") {
+      capturedCurateResumeOnError = onError;
       return {
         completion: mockCuratedResumeCompletion,
         isLoading: mockCuratedResumeLoading,
@@ -28,6 +35,7 @@ vi.mock("@ai-sdk/react", () => ({
         error: null,
       };
     }
+    capturedCoverLetterOnError = onError;
     return {
       completion: mockCompletion,
       isLoading: mockIsLoading,
@@ -52,6 +60,8 @@ describe("Integration tests", () => {
     mockError = null;
     mockCuratedResumeCompletion = "";
     mockCuratedResumeLoading = false;
+    capturedCoverLetterOnError = undefined;
+    capturedCurateResumeOnError = undefined;
   });
 
   it("full flow: mock scrape + mock parse + mock generate → cover letter appears", async () => {
@@ -435,6 +445,44 @@ describe("Integration tests", () => {
     render(<Home />);
     await user.click(screen.getByTestId("cancel-btn"));
     expect(mockStopCurateResume).toHaveBeenCalledOnce();
+  });
+
+  it("cover letter API error message surfaces in toast (not generic fallback)", async () => {
+    const toastSpy = vi.spyOn(toast, "error").mockImplementation(() => ({} as never));
+
+    render(<Home />);
+
+    const creditError = new Error(
+      "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."
+    );
+    capturedCoverLetterOnError?.(creditError);
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."
+      );
+    });
+
+    toastSpy.mockRestore();
+  });
+
+  it("curate resume API error message surfaces in toast (not generic fallback)", async () => {
+    const toastSpy = vi.spyOn(toast, "error").mockImplementation(() => ({} as never));
+
+    render(<Home />);
+
+    const creditError = new Error(
+      "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."
+    );
+    capturedCurateResumeOnError?.(creditError);
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."
+      );
+    });
+
+    toastSpy.mockRestore();
   });
 
   it("stream interruption: partial text remains visible and exportable", async () => {
