@@ -17,6 +17,8 @@ import { ResumeProgress, type ResumePhase } from "@/components/resume-progress";
 import { ExportToolbar } from "@/components/export-toolbar";
 import { toast } from "sonner";
 import type { Tone, ResumeEvaluation as ResumeEvaluationType, AttemptRecord } from "@/types";
+import { restoreProtectedFields } from "@/lib/restore-protected-fields";
+import { extractResumeSections } from "@/lib/extract-resume-sections";
 
 const MAX_GENERATION_ATTEMPTS = 3;
 
@@ -39,19 +41,35 @@ function pickPhrase(): string {
   return GENERATE_PHRASES[Math.floor(Math.random() * GENERATE_PHRASES.length)];
 }
 
-function buildEvaluationFeedback(evaluation: ResumeEvaluationType): string {
+function buildEvaluationFeedback(
+  evaluation: ResumeEvaluationType,
+  originalResume: string
+): string {
   const lines: string[] = [];
 
   if (evaluation.hallucinationsFound && evaluation.hallucinationDetails.length > 0) {
-    lines.push(
-      "Hallucinations (content NOT in the original resume) that MUST be removed entirely:"
-    );
+    lines.push("Hallucinations that MUST be removed entirely:");
     evaluation.hallucinationDetails.forEach((d) => lines.push(`- ${d}`));
+  }
+
+  // Include exact original sections as concrete reference text for restoration
+  const { contactBlock, educationBlock } = extractResumeSections(originalResume);
+  if (contactBlock) {
+    lines.push(
+      "\nORIGINAL NAME AND CONTACT BLOCK — copy verbatim, character-for-character:"
+    );
+    lines.push(contactBlock);
+  }
+  if (educationBlock) {
+    lines.push(
+      "\nORIGINAL EDUCATION SECTION — copy verbatim, do not alter any school name, degree, or date:"
+    );
+    lines.push(educationBlock);
   }
 
   if (evaluation.missingKeywords.length > 0) {
     lines.push(
-      `\nKeywords from the job description that are missing and should be incorporated (only if the original resume supports them): ${evaluation.missingKeywords.join(", ")}`
+      `\nMissing keywords to incorporate (only if supported by original): ${evaluation.missingKeywords.join(", ")}`
     );
   }
 
@@ -164,6 +182,19 @@ export function CoverLetterForm() {
           currentCurated = curated ?? "";
           if (!currentCurated) break;
 
+          // Deterministically restore name/contact and EDUCATION before evaluation
+          const { text: restoredText, restorations } = restoreProtectedFields(
+            currentCurated,
+            resumeText
+          );
+          if (restorations.length > 0) {
+            console.log(
+              `[CoverLetterForm] Restored ${restorations.length} protected fields:`,
+              restorations
+            );
+          }
+          currentCurated = restoredText;
+
           setResumePhase("evaluating");
 
           let evaluation: ResumeEvaluationType | null = null;
@@ -217,7 +248,7 @@ export function CoverLetterForm() {
 
           // Build feedback for the next attempt from the failed evaluation
           if (evaluation) {
-            lastFeedback = buildEvaluationFeedback(evaluation);
+            lastFeedback = buildEvaluationFeedback(evaluation, resumeText);
             console.log(`[CoverLetterForm] Hallucinations detected, retrying with feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);
           } else {
             console.log(`[CoverLetterForm] Evaluation error, retrying without feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);

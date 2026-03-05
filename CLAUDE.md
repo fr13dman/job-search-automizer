@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Change Summary Requirement
+
+Before making any code changes, always provide a concise summary of what will be changed:
+- Which files will be modified or created
+- What each change does and why
+- Any risks or trade-offs
+
 ## Commands
 
 - `npm run dev` — start Next.js dev server (localhost:3000)
