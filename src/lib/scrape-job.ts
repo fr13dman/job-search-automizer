@@ -67,7 +67,9 @@ async function tryGreenhouseApi(url: string): Promise<ScrapeResult | null> {
     const data = (await res.json()) as GreenhouseJob;
     if (!data.content) return null;
 
-    const body = decodeGreenhouseContent(data.content);
+    // Collapse only the body; keep the header lines separate so extraction
+    // patterns that rely on \n boundaries (e.g. [^\n,|·•]+) work correctly.
+    const body = decodeGreenhouseContent(data.content).replace(/\s+/g, " ").trim();
     const header = [
       data.title && `Job Title: ${data.title}`,
       data.company_name && `Company: ${data.company_name.trim()}`,
@@ -77,7 +79,6 @@ async function tryGreenhouseApi(url: string): Promise<ScrapeResult | null> {
       .join("\n");
 
     let text = header ? `${header}\n\n${body}` : body;
-    text = text.replace(/\s+/g, " ").trim();
     if (text.length > MAX_LENGTH) text = text.slice(0, MAX_LENGTH);
 
     return { success: true, jobDescription: text };
@@ -93,18 +94,23 @@ export function extractJobDescription(html: string): ScrapeResult {
 
   const $ = cheerio.load(html);
 
-  // Extract JSON-LD JobPosting description before stripping script tags.
+  // Extract JSON-LD JobPosting description AND structured metadata before stripping script tags.
   // Handles JS-rendered SPAs (e.g. Workday) where <body> is empty but the
   // full job description is embedded in structured data.
   let jsonLdText = "";
+  let structuredTitle = "";
+  let structuredCompany = "";
   $('script[type="application/ld+json"]').each((_, el) => {
-    if (jsonLdText) return;
+    if (jsonLdText && structuredTitle && structuredCompany) return;
     try {
       const data = JSON.parse($(el).text()) as Record<string, unknown>;
       const items: Record<string, unknown>[] = Array.isArray(data) ? data : [data];
       for (const item of items) {
-        if (item?.["@type"] === "JobPosting" && typeof item.description === "string") {
-          jsonLdText = item.description;
+        if (item?.["@type"] === "JobPosting") {
+          if (typeof item.description === "string" && !jsonLdText) jsonLdText = item.description;
+          if (typeof item.title === "string" && !structuredTitle) structuredTitle = item.title.trim();
+          const org = item.hiringOrganization as Record<string, unknown> | undefined;
+          if (org && typeof org.name === "string" && !structuredCompany) structuredCompany = org.name.trim();
           break;
         }
       }
@@ -113,11 +119,51 @@ export function extractJobDescription(html: string): ScrapeResult {
     }
   });
 
+  // og:title fallback: "Title at Company" or "Title - Company - Location | Site"
+  if (!structuredTitle) {
+    const ogTitle = ($('meta[property="og:title"]').attr("content") || "").trim();
+    if (ogTitle) {
+      const atMatch = ogTitle.match(/^(.+?)\s+at\s+([^|–—-].+?)(?:\s*[|–—].*)?$/i);
+      if (atMatch) {
+        structuredTitle = atMatch[1].trim();
+        if (!structuredCompany) structuredCompany = atMatch[2].trim();
+      } else {
+        const sepMatch = ogTitle.match(/^([^|–—-]+?)\s*[|–—-]+\s*([^|–—-]+)/);
+        if (sepMatch) {
+          structuredTitle = sepMatch[1].trim();
+          // Only use second segment as company if it doesn't look like a location (City, ST or Remote)
+          if (!structuredCompany) {
+            const candidate = sepMatch[2].trim();
+            if (!/\b[A-Z]{2}\b/.test(candidate) && !/^remote$/i.test(candidate)) {
+              structuredCompany = candidate;
+            }
+          }
+        } else if (ogTitle.length < 80) {
+          structuredTitle = ogTitle;
+        }
+      }
+    }
+  }
+
+  // og:site_name for company — filter out generic job board names
+  if (!structuredCompany) {
+    const siteName = ($('meta[property="og:site_name"]').attr("content") || "").trim();
+    if (siteName && !/^(linkedin|indeed|glassdoor|ziprecruiter|monster|dice|lever|ashby|workday|workable|bamboohr|greenhouse)/i.test(siteName)) {
+      structuredCompany = siteName;
+    }
+  }
+
   // Meta description as a secondary fallback (also populated on Workday pages).
   const metaDesc =
     $('meta[property="og:description"]').attr("content") ||
     $('meta[name="description"]').attr("content") ||
     "";
+
+  // h1 as title fallback
+  if (!structuredTitle) {
+    const h1 = $("h1").first().text().trim().replace(/\s+/g, " ");
+    if (h1 && h1.length >= 3 && h1.length < 80) structuredTitle = h1;
+  }
 
   for (const tag of STRIP_TAGS) {
     $(tag).remove();
@@ -151,6 +197,16 @@ export function extractJobDescription(html: string): ScrapeResult {
   // Truncate
   if (text.length > MAX_LENGTH) {
     text = text.slice(0, MAX_LENGTH);
+  }
+
+  // Prepend structured metadata header (same format as Greenhouse API) so that
+  // extractJobTitle / extractCompanyName patterns fire reliably for all pages.
+  if (structuredTitle || structuredCompany) {
+    const headerLines = [
+      structuredTitle && `Job Title: ${structuredTitle}`,
+      structuredCompany && `Company: ${structuredCompany}`,
+    ].filter(Boolean);
+    text = headerLines.join("\n") + "\n\n" + text;
   }
 
   return { success: true, jobDescription: text };
