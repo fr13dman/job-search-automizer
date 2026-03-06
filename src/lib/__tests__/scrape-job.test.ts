@@ -97,6 +97,91 @@ describe("extractJobDescription", () => {
     expect(result.success).toBe(true);
     expect(result.jobDescription).toBe("Actual job content here.");
   });
+
+  // ── Structured metadata header prepend ──────────────────────────────────────
+
+  it("prepends Job Title and Company from JSON-LD JobPosting", () => {
+    const html = `<html><head>
+      <script type="application/ld+json">{
+        "@type": "JobPosting",
+        "title": "Senior Software Engineer",
+        "hiringOrganization": { "name": "Stripe" },
+        "description": "Build payment systems."
+      }</script>
+    </head><body><main>Build payment systems.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toMatch(/^Job Title: Senior Software Engineer\nCompany: Stripe\n\n/);
+  });
+
+  it("prepends only Job Title when hiringOrganization is absent", () => {
+    const html = `<html><head>
+      <script type="application/ld+json">{
+        "@type": "JobPosting",
+        "title": "Backend Engineer",
+        "description": "Build APIs."
+      }</script>
+    </head><body><main>Build APIs.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).toMatch(/^Job Title: Backend Engineer\n\n/);
+    expect(result.jobDescription).not.toContain("Company:");
+  });
+
+  it("extracts title and company from og:title 'Title at Company' pattern", () => {
+    const html = `<html><head>
+      <meta property="og:title" content="Product Manager at Acme Corp" />
+    </head><body><main>Join our product team.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).toMatch(/^Job Title: Product Manager\nCompany: Acme Corp\n\n/);
+  });
+
+  it("extracts title from og:title 'Title - Company' separator pattern", () => {
+    const html = `<html><head>
+      <meta property="og:title" content="Data Analyst - Meta" />
+    </head><body><main>Analyze data.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).toMatch(/^Job Title: Data Analyst\nCompany: Meta\n\n/);
+  });
+
+  it("skips second og:title segment when it looks like a location (City, ST)", () => {
+    const html = `<html><head>
+      <meta property="og:title" content="Software Engineer - San Francisco, CA" />
+    </head><body><main>Build things.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).toMatch(/^Job Title: Software Engineer\n\n/);
+    expect(result.jobDescription).not.toContain("Company: San Francisco");
+  });
+
+  it("uses og:site_name as company when not a known job board", () => {
+    const html = `<html><head>
+      <meta property="og:site_name" content="Paysafe" />
+      <meta property="og:title" content="VP Payments Engineering" />
+    </head><body><main>Lead payments platform.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).toMatch(/^Job Title: VP Payments Engineering\nCompany: Paysafe\n\n/);
+  });
+
+  it("filters out known job board site names (LinkedIn, Indeed)", () => {
+    const html = `<html><head>
+      <meta property="og:site_name" content="LinkedIn" />
+      <meta property="og:title" content="Engineer" />
+    </head><body><main>Job details.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).not.toContain("Company: LinkedIn");
+  });
+
+  it("falls back to h1 when no structured metadata is present", () => {
+    const html = `<html><body><main><h1>DevOps Engineer</h1><p>Manage infrastructure.</p></main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).toMatch(/^Job Title: DevOps Engineer\n\n/);
+  });
+
+  it("does not prepend header when no structured metadata is found", () => {
+    const html = `<html><body><main>We are looking for a great engineer.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.jobDescription).not.toContain("Job Title:");
+    expect(result.jobDescription).not.toContain("Company:");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -193,6 +193,25 @@ describe("buildPdfFilename", () => {
     });
     expect(result).toBe("paysafe-vp-payments-engineering-cover-letter.pdf");
   });
+
+  it("falls back to company-cover-letter when slug exceeds 45 chars", () => {
+    // "acme-corp-director-of-platform-engineering-cover-letter" = 55 chars → truncate
+    const result = buildPdfFilename({
+      companyName: "Acme Corp",
+      jobTitle: "Director of Platform Engineering",
+    });
+    expect(result).toBe("acme-corp-cover-letter.pdf");
+  });
+
+  it("does not truncate when slug is exactly 45 chars", () => {
+    // "stripe-senior-software-engineer-cover-letter" = 44 chars → keep
+    const result = buildPdfFilename({
+      companyName: "Stripe",
+      jobTitle: "Senior Software Engineer",
+    });
+    expect(result.length).toBeLessThanOrEqual(45 + ".pdf".length);
+    expect(result).toContain("senior-software-engineer");
+  });
 });
 
 describe("buildCoverLetterDocxFilename", () => {
@@ -312,6 +331,22 @@ describe("buildResumeFilename", () => {
     expect(result1).not.toMatch(/^-|-$/);
     expect(result2).not.toMatch(/^-|-$/);
     expect(result3).not.toMatch(/^-|-$/);
+  });
+
+  it("falls back to company-resume when slug exceeds 45 chars", () => {
+    // "acme-corp-director-of-platform-engineering-resume" = 49 chars → truncate
+    const resume = "Jane Smith\nEngineer";
+    const jd = "Director of Platform Engineering\nCompany: Acme Corp";
+    const result = buildResumeFilename(resume, jd);
+    expect(result).toBe("acme-corp-resume");
+  });
+
+  it("does not truncate resume filename when slug is within 45 chars", () => {
+    // "meta-data-analyst-resume" = 24 chars → keep
+    const resume = "Jane Smith\nAnalyst";
+    const jd = "Job Title: Data Analyst\nCompany: Meta";
+    const result = buildResumeFilename(resume, jd);
+    expect(result).toBe("meta-data-analyst-resume");
   });
 });
 

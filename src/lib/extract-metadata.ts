@@ -188,6 +188,8 @@ function slugify(s: string): string {
  * Build a filename for the curated resume using company and job title.
  * Format: {company}-{job-title}-resume  (no extension)
  */
+const MAX_FILENAME_LENGTH = 45;
+
 export function buildResumeFilename(_resumeText: string, jobDescription: string): string {
   const companyName = extractCompanyName("", jobDescription);
   const jobTitle = extractJobTitle("", jobDescription);
@@ -197,7 +199,11 @@ export function buildResumeFilename(_resumeText: string, jobDescription: string)
   if (jobTitle) parts.push(slugify(jobTitle));
   parts.push("resume");
 
-  return parts.join("-");
+  const full = parts.join("-");
+  if (full.length > MAX_FILENAME_LENGTH && companyName) {
+    return `${slugify(companyName)}-resume`;
+  }
+  return full;
 }
 
 function buildCoverLetterBasename(metadata: PdfMetadata): string {
@@ -205,7 +211,11 @@ function buildCoverLetterBasename(metadata: PdfMetadata): string {
   if (metadata.companyName) parts.push(slugify(metadata.companyName));
   if (metadata.jobTitle) parts.push(slugify(metadata.jobTitle));
   parts.push("cover-letter");
-  return parts.join("-");
+  const full = parts.join("-");
+  if (full.length > MAX_FILENAME_LENGTH && metadata.companyName) {
+    return `${slugify(metadata.companyName)}-cover-letter`;
+  }
+  return full;
 }
 
 export function buildPdfFilename(metadata: PdfMetadata): string {
