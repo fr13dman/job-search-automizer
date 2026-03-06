@@ -102,7 +102,8 @@ function extractJobTitle(coverLetter: string, jobDescription: string): string | 
 
   const jdPatterns = [
     // "Job Title: Software Engineer" or "Position: Senior Developer"
-    /(?:job\s+title|position|role)\s*[:]\s*([^\n,|·•]+)/i,
+    // Commas are valid in titles ("Director, Engineering") — only \n stops the match.
+    /(?:job\s+title|position|role)\s*[:]\s*([^\n|·•]+)/i,
     // First line of multi-line JD (e.g. copy-pasted text with newlines)
     /^([A-Z][A-Za-z /,()-]+)(?=\n)/,
     // First segment before · • – — separators used in scraped single-line text

@@ -130,6 +130,14 @@ We are looking for a Senior Software Engineer to join our platform team...`;
     expect(result.jobTitle).toBe("Senior Software Engineer");
   });
 
+  it("extracts job title with comma from structured JD header (e.g. Director, Engineering)", () => {
+    // Greenhouse API returns titles like "Director, Engineering" — commas must not truncate the title
+    const jd = "Job Title: Director, Engineering\nCompany: Kaseya Careers\nLocation: United States - Remote\n\nLead engineering teams.";
+    const result = extractMetadata("Dear Hiring Manager,\n\nSincerely,\nJohn Doe", jd);
+    expect(result.jobTitle).toBe("Director, Engineering");
+    expect(result.companyName).toBe("Kaseya Careers");
+  });
+
   it("extracts Paysafe / VP Payments Engineering from realistic scraped JD + cover letter", () => {
     // Simulates scraped text from https://jobs.paysafe.com/job/Jacksonville-VP-Payments-Engineering-FL-32256/1362676600/
     const paysafeJd = `VP Payments Engineering

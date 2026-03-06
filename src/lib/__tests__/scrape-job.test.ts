@@ -272,4 +272,32 @@ describe("scrapeJobUrl — Greenhouse integration", () => {
     expect(result.jobDescription).not.toContain("&amp;");
     expect(result.jobDescription).not.toContain("&mdash;");
   });
+
+  it("preserves newline separators in header so extraction patterns work", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(makeGreenhouseFetch(GREENHOUSE_JOB) as typeof fetch);
+
+    const result = await scrapeJobUrl("https://www.acme.com/careers/job?gh_jid=12345");
+
+    // Header lines must be \n-separated so [^\n]+ patterns stop at the right boundary.
+    // The old bug: text.replace(/\s+/g, " ") collapsed header into a single line,
+    // making Company: capture the rest of the document instead of just the company name.
+    expect(result.jobDescription).toMatch(/^Job Title: Senior Engineer\nCompany: Acme Inc\nLocation: Remote\n\n/);
+  });
+
+  it("handles job title with comma such as 'Director, Engineering'", async () => {
+    const job = {
+      title: "Director, Engineering",
+      company_name: "Kaseya Careers",
+      location: { name: "United States - Remote" },
+      content: "&lt;p&gt;Lead engineering teams.&lt;/p&gt;",
+    };
+    vi.spyOn(global, "fetch").mockImplementation(makeGreenhouseFetch(job) as typeof fetch);
+
+    const result = await scrapeJobUrl("https://www.kaseya.com/careers/jobs/id/123/?gh_jid=123");
+
+    expect(result.success).toBe(true);
+    // Title with comma must appear verbatim on its own line
+    expect(result.jobDescription).toMatch(/^Job Title: Director, Engineering\n/);
+    expect(result.jobDescription).toContain("Company: Kaseya Careers");
+  });
 });

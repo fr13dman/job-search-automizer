@@ -67,7 +67,9 @@ async function tryGreenhouseApi(url: string): Promise<ScrapeResult | null> {
     const data = (await res.json()) as GreenhouseJob;
     if (!data.content) return null;
 
-    const body = decodeGreenhouseContent(data.content);
+    // Collapse only the body; keep the header lines separate so extraction
+    // patterns that rely on \n boundaries (e.g. [^\n,|·•]+) work correctly.
+    const body = decodeGreenhouseContent(data.content).replace(/\s+/g, " ").trim();
     const header = [
       data.title && `Job Title: ${data.title}`,
       data.company_name && `Company: ${data.company_name.trim()}`,
@@ -77,7 +79,6 @@ async function tryGreenhouseApi(url: string): Promise<ScrapeResult | null> {
       .join("\n");
 
     let text = header ? `${header}\n\n${body}` : body;
-    text = text.replace(/\s+/g, " ").trim();
     if (text.length > MAX_LENGTH) text = text.slice(0, MAX_LENGTH);
 
     return { success: true, jobDescription: text };
