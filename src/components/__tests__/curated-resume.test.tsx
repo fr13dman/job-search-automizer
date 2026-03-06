@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
-const { mockDownloadDocx, mockDownloadResumePdf } = vi.hoisted(() => ({
-  mockDownloadDocx: vi.fn(),
+const { mockDownloadResumeDocx, mockDownloadResumePdf } = vi.hoisted(() => ({
+  mockDownloadResumeDocx: vi.fn(),
   mockDownloadResumePdf: vi.fn(),
 }));
 
-vi.mock("@/lib/generate-docx", () => ({
-  downloadDocx: mockDownloadDocx,
+vi.mock("@/lib/generate-resume-docx", () => ({
+  downloadResumeDocx: mockDownloadResumeDocx,
 }));
 
 vi.mock("@/lib/generate-resume-pdf", () => ({
@@ -27,7 +27,7 @@ import { toast } from "sonner";
 describe("CuratedResume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDownloadDocx.mockResolvedValue(undefined);
+    mockDownloadResumeDocx.mockResolvedValue(undefined);
     mockDownloadResumePdf.mockResolvedValue(undefined);
   });
 
@@ -83,10 +83,11 @@ describe("CuratedResume", () => {
     fireEvent.click(screen.getByRole("button", { name: /download docx/i }));
 
     await waitFor(() => {
-      expect(mockDownloadDocx).toHaveBeenCalledWith(
+      expect(mockDownloadResumeDocx).toHaveBeenCalledWith(
         "EXPERIENCE\n- Led team",
         expect.stringMatching(/\.docx$/)
       );
+      // Note: downloadResumeDocx(text, filename) — no metadata arg for resume
     });
   });
 
@@ -103,7 +104,7 @@ describe("CuratedResume", () => {
   });
 
   it("shows toast error when DOCX download fails", async () => {
-    mockDownloadDocx.mockRejectedValue(new Error("DOCX failed"));
+    mockDownloadResumeDocx.mockRejectedValue(new Error("DOCX failed"));
 
     render(
       <CuratedResume completion={"EXPERIENCE\n- Led team"} isLoading={false} />
@@ -118,7 +119,7 @@ describe("CuratedResume", () => {
 
   it("DOCX button shows Downloading and is disabled during DOCX download", async () => {
     let resolveDownload!: () => void;
-    mockDownloadDocx.mockReturnValue(
+    mockDownloadResumeDocx.mockReturnValue(
       new Promise<void>((res) => { resolveDownload = res; })
     );
 
@@ -139,7 +140,7 @@ describe("CuratedResume", () => {
 
   it("PDF button is also disabled while DOCX is downloading", async () => {
     let resolveDownload!: () => void;
-    mockDownloadDocx.mockReturnValue(
+    mockDownloadResumeDocx.mockReturnValue(
       new Promise<void>((res) => { resolveDownload = res; })
     );
 

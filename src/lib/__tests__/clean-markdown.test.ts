@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripNonBoldMarkdown, stripCuratedMarkers } from "@/lib/clean-markdown";
+import { stripNonBoldMarkdown, stripCuratedMarkers, stripLetterHeader } from "@/lib/clean-markdown";
 
 describe("stripNonBoldMarkdown", () => {
   it("returns plain text unchanged", () => {
@@ -113,5 +113,41 @@ describe("stripCuratedMarkers", () => {
 
   it("does not strip single-underscore italic patterns", () => {
     expect(stripCuratedMarkers("_italic_")).toBe("_italic_");
+  });
+});
+
+describe("stripLetterHeader", () => {
+  it("removes lines before 'Dear ...' when a header block is present", () => {
+    const input = "Jane Doe\njane@example.com\n(555) 123-4567\n\nDear Hiring Manager,\n\nBody text.";
+    const result = stripLetterHeader(input);
+    expect(result).toBe("Dear Hiring Manager,\n\nBody text.");
+  });
+
+  it("leaves the text unchanged when it already starts with 'Dear'", () => {
+    const input = "Dear Mr. Smith,\n\nThank you for your time.";
+    expect(stripLetterHeader(input)).toBe(input);
+  });
+
+  it("handles blank lines before 'Dear'", () => {
+    const input = "\n\nJohn Doe\n\nDear Team,\n\nBody.";
+    expect(stripLetterHeader(input)).toBe("Dear Team,\n\nBody.");
+  });
+
+  it("is case-insensitive for the salutation", () => {
+    const input = "Some Header\ndear sir or madam,\n\nBody.";
+    expect(stripLetterHeader(input)).toBe("dear sir or madam,\n\nBody.");
+  });
+
+  it("strips leading contact lines when no 'Dear' is found", () => {
+    const input = "jane@example.com\n(555) 123-4567\n\nBody paragraph with no salutation.";
+    const result = stripLetterHeader(input);
+    expect(result).not.toContain("jane@example.com");
+    expect(result).not.toContain("555");
+    expect(result).toContain("Body paragraph");
+  });
+
+  it("returns text unchanged when there is no header and no 'Dear'", () => {
+    const input = "Just a plain paragraph with no contact info.";
+    expect(stripLetterHeader(input)).toBe(input);
   });
 });

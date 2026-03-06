@@ -10,6 +10,8 @@ const mockSetTextColor = vi.fn();
 const mockSetDrawColor = vi.fn();
 const mockSetLineWidth = vi.fn();
 const mockLine = vi.fn();
+const mockSetFillColor = vi.fn();
+const mockRect = vi.fn();
 
 vi.mock("jspdf", () => {
   return {
@@ -23,6 +25,8 @@ vi.mock("jspdf", () => {
         setTextColor: mockSetTextColor,
         setDrawColor: mockSetDrawColor,
         setLineWidth: mockSetLineWidth,
+        setFillColor: mockSetFillColor,
+        rect: mockRect,
         line: mockLine,
         splitTextToSize: mockSplitTextToSize,
         text: mockText,
@@ -115,7 +119,7 @@ describe("downloadPdf", () => {
       (call: unknown[]) =>
         typeof call[0] === "string" &&
         call[0].includes("First wrapped") &&
-        call[3]?.align === "justify"
+        (call[3] as Record<string, unknown>)?.align === "justify"
     );
     expect(justifiedCall).toBeDefined();
   });
@@ -132,13 +136,14 @@ describe("downloadPdf", () => {
     expect(mockSave).toHaveBeenCalledWith("cover-letter.pdf");
   });
 
-  it("handles multi-page text correctly", () => {
+  it("stays within one page even with long content", () => {
     const manyLines = Array.from({ length: 60 }, (_, i) => `Line ${i}`);
     mockSplitTextToSize.mockReturnValue(manyLines);
 
     downloadPdf(manyLines.join("\n\n"));
 
-    expect(mockAddPage).toHaveBeenCalled();
+    // Cover letter is always single-page — no addPage call
+    expect(mockAddPage).not.toHaveBeenCalled();
     expect(mockSave).toHaveBeenCalled();
   });
 });

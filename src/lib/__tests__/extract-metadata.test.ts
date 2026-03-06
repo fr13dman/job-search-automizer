@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractMetadata, buildPdfFilename, buildResumeFilename, buildCoverLetterDocxFilename } from "@/lib/extract-metadata";
+import { extractMetadata, extractContactInfo, buildPdfFilename, buildResumeFilename, buildCoverLetterDocxFilename } from "@/lib/extract-metadata";
 
 describe("extractMetadata", () => {
   const sampleLetter = `Dear Hiring Manager,
@@ -312,5 +312,89 @@ describe("buildResumeFilename", () => {
     expect(result1).not.toMatch(/^-|-$/);
     expect(result2).not.toMatch(/^-|-$/);
     expect(result3).not.toMatch(/^-|-$/);
+  });
+});
+
+describe("extractContactInfo", () => {
+  it("extracts email from contact block", () => {
+    const resume = "John Doe\njohn.doe@example.com\n555-123-4567\nSan Francisco, CA\n\nEXPERIENCE";
+    const result = extractContactInfo(resume);
+    expect(result.email).toBe("john.doe@example.com");
+  });
+
+  it("extracts phone with parentheses format", () => {
+    const resume = "Jane Smith\n(415) 555-9876\njane@email.com";
+    const result = extractContactInfo(resume);
+    expect(result.phone).toBe("(415) 555-9876");
+  });
+
+  it("extracts phone with dot separator format", () => {
+    const resume = "Bob Lee\nbob@email.com\n415.555.0199";
+    const result = extractContactInfo(resume);
+    expect(result.phone).toBe("415.555.0199");
+  });
+
+  it("extracts phone with +1 prefix", () => {
+    const resume = "Alice Johnson\n+1 800 555 0100\nalice@example.com";
+    const result = extractContactInfo(resume);
+    expect(result.phone).toBe("+1 800 555 0100");
+  });
+
+  it("extracts city/state address line", () => {
+    const resume = "John Doe\njohn@email.com\nSan Francisco, CA\n\nEXPERIENCE";
+    const result = extractContactInfo(resume);
+    expect(result.address).toBe("San Francisco, CA");
+  });
+
+  it("extracts city/state/zip address line", () => {
+    const resume = "Jane Smith\njane@email.com\nNew York, NY 10001";
+    const result = extractContactInfo(resume);
+    expect(result.address).toBe("New York, NY 10001");
+  });
+
+  it("extracts street address starting with digits", () => {
+    const resume = "Bob Lee\n123 Main Street\nbob@email.com";
+    const result = extractContactInfo(resume);
+    expect(result.address).toBe("123 Main Street");
+  });
+
+  it("returns undefined for missing fields", () => {
+    const resume = "John Doe\nSoftware Engineer\n\nEXPERIENCE\nBuilt things.";
+    const result = extractContactInfo(resume);
+    expect(result.email).toBeUndefined();
+    expect(result.phone).toBeUndefined();
+    expect(result.address).toBeUndefined();
+  });
+
+  it("only scans the first 10 lines — ignores contact-like data deeper in the resume", () => {
+    const lines = [
+      "John Doe",
+      "Software Engineer",
+      "", "", "", "", "", "", "", "", // lines 3–10
+      "john@email.com", // line 11 — should NOT be found
+      "555-000-1234",   // line 12 — should NOT be found
+    ];
+    const result = extractContactInfo(lines.join("\n"));
+    expect(result.email).toBeUndefined();
+    expect(result.phone).toBeUndefined();
+  });
+
+  it("extractMetadata with resumeText populates phone/email/address in metadata", () => {
+    const resume = "Jane Smith\njane@work.com\n(650) 555-7890\nAustin, TX";
+    const letter = "Dear Hiring Manager,\n\nI am excited to apply.\n\nSincerely,\nJane Smith";
+    const jd = "Software Engineer\nCompany: Acme Corp";
+    const result = extractMetadata(letter, jd, resume);
+    expect(result.email).toBe("jane@work.com");
+    expect(result.phone).toBe("(650) 555-7890");
+    expect(result.address).toBe("Austin, TX");
+  });
+
+  it("extractMetadata without resumeText leaves phone/email/address undefined", () => {
+    const letter = "Dear Hiring Manager,\n\nSincerely,\nJohn Doe";
+    const jd = "Engineer\nCompany: Stripe";
+    const result = extractMetadata(letter, jd);
+    expect(result.phone).toBeUndefined();
+    expect(result.email).toBeUndefined();
+    expect(result.address).toBeUndefined();
   });
 });

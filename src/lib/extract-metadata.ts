@@ -121,15 +121,61 @@ function extractJobTitle(coverLetter: string, jobDescription: string): string | 
   return undefined;
 }
 
+/**
+ * Extract phone, email, and location/address from the top of a resume.
+ * Scans only the first 10 lines (the contact block) to avoid false positives.
+ */
+export function extractContactInfo(resumeText: string): {
+  phone?: string;
+  email?: string;
+  address?: string;
+} {
+  const lines = resumeText.split("\n").slice(0, 10);
+  const block = lines.join("\n");
+
+  const email = block.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0];
+
+  const phone = block.match(
+    /(?:\+1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/
+  )?.[0];
+
+  // Look for a city/state line: e.g. "San Francisco, CA" or "New York, NY 10001"
+  // or a full street address line containing a digit-prefixed number
+  let address: string | undefined;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // City, ST or City, ST 00000
+    if (/^[A-Za-z\s]+,\s*[A-Z]{2}(\s+\d{5})?$/.test(trimmed)) {
+      address = trimmed;
+      break;
+    }
+    // Street address: starts with digits (e.g. "123 Main Street")
+    if (/^\d+\s+[A-Za-z]/.test(trimmed) && trimmed.length < 80) {
+      address = trimmed;
+      break;
+    }
+  }
+
+  return { email, phone, address };
+}
+
 export function extractMetadata(
   coverLetter: string,
-  jobDescription: string
+  jobDescription: string,
+  resumeText = ""
 ): PdfMetadata {
   const metadata: PdfMetadata = {};
 
   metadata.candidateName = extractCandidateName(coverLetter);
   metadata.companyName = extractCompanyName(coverLetter, jobDescription);
   metadata.jobTitle = extractJobTitle(coverLetter, jobDescription);
+
+  if (resumeText) {
+    const contact = extractContactInfo(resumeText);
+    metadata.phone = contact.phone;
+    metadata.email = contact.email;
+    metadata.address = contact.address;
+  }
 
   return metadata;
 }
