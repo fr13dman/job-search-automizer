@@ -19,11 +19,11 @@ const EvaluationSchema = z.object({
   hallucinationsFound: z
     .boolean()
     .describe(
-      "True if ANY of the following: (1) a metric or number in the curated resume differs from the original, (2) a company name or employer name differs from the original, or (3) a specific achievement or project cannot be traced to the original resume. Adding job-description keywords that are demonstrably supported by the original experience is NOT a hallucination. Note: the EDUCATION section is pre-populated verbatim from the original and does not need to be checked."
+      "True only if the curated resume contains a claim that is entirely fabricated with no basis in the original — an invented employer, an invented role, or a specific project/achievement the candidate never performed. Rewriting, rephrasing, and professionalising existing content is NOT a hallucination. Numeric values and the education section are verified by separate deterministic checks and do not need to be assessed here."
     ),
   hallucinationDetails: z
     .array(z.string())
-    .describe("Specific items in the curated resume that are not present in the original resume"),
+    .describe("Specific claims in the curated resume that are entirely fabricated with no traceable basis in the original resume (e.g. invented employer, invented project, invented role). Do not list narrative rewrites or phrasing improvements."),
   overallAssessment: z
     .string()
     .describe("2–3 sentence summary of the resume's ATS readiness and quality"),
@@ -95,27 +95,29 @@ export async function POST(request: NextRequest) {
 2. A job description
 3. A CURATED resume that was rewritten to match the job description
 
-CRITICAL RULE: hallucinationsFound MUST be set to true if ANY single check below fails. Do not weigh severity — one failure = true. When uncertain, set to true. A false positive is far less harmful than a false negative.
+The curated resume was produced by an AI that rewrote the original to be more concise, professional, and ATS-optimised. Rewriting, rephrasing, condensing, and adding JD-relevant keywords supported by the original experience are all expected and correct — do NOT flag these.
 
-NOTE: The EDUCATION section in the curated resume has already been replaced verbatim with content from the original resume by a deterministic post-processing step. Do not check or flag anything in the EDUCATION section.
+ALREADY VERIFIED BY DETERMINISTIC CHECKS (do not re-check):
+- All numeric values and statistics — a separate code-level check has already verified every number in the original appears in the curated resume with the same value.
+- The EDUCATION section — it has been replaced verbatim from the original before this evaluation.
 
-METRICS INTEGRITY CHECK (failure → hallucinationsFound: true):
-1. Extract every number, percentage, dollar amount, headcount, and duration (numeric achievement) from accomplishment bullets in the ORIGINAL resume (e.g. "40%", "$2M", "team of 12", "5,000 TPS", "99.99% uptime").
-2. For each numeric value in the CURATED resume's accomplishment bullets, confirm it appears with the exact same value in the original.
-3. If any metric in the curated resume has a different value than the original — even if rounded, approximated, or unit-converted — set hallucinationsFound to true and add to hallucinationDetails.
+FABRICATED FACTS CHECK:
+Only set hallucinationsFound to true when the curated resume contains a claim that has NO basis whatsoever in the original — a clear invention, not a rewrite. Ask yourself: "Is there any work, project, or experience in the original that this could reasonably be describing?" If yes, it is not a hallucination.
 
-HALLUCINATION CHECK — flag these (genuine fabrications):
-- A company name or employer that does not appear in the original
-- A job title that differs substantively from the original (e.g. different function or seniority level)
-- A specific project, product, or accomplishment that cannot be traced to the original
-- A technology or tool that is completely absent from the original AND cannot be reasonably inferred from listed tools (e.g. listing Kubernetes when the original only mentions Excel is a hallucination; listing TypeScript when the original mentions JavaScript is NOT)
-- Content that appears verbatim duplicated from another section
+Flag ONLY these (genuine fabrications with no basis in the original):
+- A company name or employer that does not appear anywhere in the original
+- A completely different role or job function (e.g. original: accountant; curated: software engineer)
+- A specific project or product that is entirely invented with no connection to any work described in the original (e.g. "Founded and led a startup" when the original contains no mention of it)
+- A technology or tool completely absent from the original AND not reasonably inferable from listed tools (e.g. Kubernetes when the original only mentions Excel; NOT TypeScript when original mentions JavaScript)
 
-Do NOT flag these (they are expected and correct):
-- Skills or keywords from the job description that are explicitly present in the original
-- Technologies reasonably implied by listed tools (CSS implied by React, SQL implied by PostgreSQL, Python implied by Django, etc.)
-- A SUMMARY section added to a resume that lacked one, provided it reflects original content
-- Rephrased or reformatted descriptions of the same work (active voice, synonyms, reordering)
+Do NOT flag these (they are expected curation):
+- Rephrasing, condensing, or professionally rewriting described work
+- Stronger action verbs, active voice, cleaner formatting
+- A SUMMARY section that reflects the candidate's actual background
+- JD keywords added where the candidate demonstrably has the underlying experience
+- Technologies reasonably implied by listed tools (CSS by React, SQL by PostgreSQL, etc.)
+- Upgraded or clarified job title phrasing within the same function (e.g. "developer" → "software engineer", "engineer" → "senior engineer" if experience supports it)
+- Removing filler, informal language, or irrelevant detail
 
 ATS KEYWORD ANALYSIS: Extract all important keywords, skills, technologies, methodologies, and role-relevant phrases from the job description. For each, check whether it appears (verbatim or as a clear synonym) in the curated resume. Report matches and gaps separately.
 

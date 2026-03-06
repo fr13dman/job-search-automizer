@@ -120,7 +120,7 @@ describe("POST /api/evaluate-resume", () => {
     expect(call.system).not.toContain("EDUCATION INTEGRITY");
   });
 
-  it("system prompt contains METRICS INTEGRITY rule", async () => {
+  it("system prompt defers numeric checks to deterministic layer (no LLM metric comparison)", async () => {
     await POST(
       makeRequest({
         resumeText: "Resume",
@@ -130,11 +130,13 @@ describe("POST /api/evaluate-resume", () => {
     );
 
     const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
-    expect(call.system).toContain("METRICS INTEGRITY");
-    expect(call.system.toLowerCase()).toContain("numeric achievement");
+    // Numeric verification is done by checkNumericFidelity in code — LLM should not re-check
+    expect(call.system).not.toContain("METRICS INTEGRITY");
+    expect(call.system.toLowerCase()).toContain("deterministic");
+    expect(call.system.toLowerCase()).toContain("numeric");
   });
 
-  it("system prompt requires hallucinationsFound:true on any single failure", async () => {
+  it("system prompt frames hallucination check as fabricated facts, not narrative rewrites", async () => {
     await POST(
       makeRequest({
         resumeText: "Resume",
@@ -144,25 +146,14 @@ describe("POST /api/evaluate-resume", () => {
     );
 
     const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
-    expect(call.system).toContain("CRITICAL RULE");
-    expect(call.system).toContain("one failure = true");
+    expect(call.system).toContain("FABRICATED FACTS CHECK");
+    // Should explicitly say rewriting is NOT a hallucination
+    expect(call.system.toLowerCase()).toContain("rewriting");
+    // Should NOT use the old strict "one failure = true" framing
+    expect(call.system).not.toContain("one failure = true");
   });
 
-  it("system prompt uses step-by-step metric comparison", async () => {
-    await POST(
-      makeRequest({
-        resumeText: "Resume",
-        jobDescription: "Job",
-        curatedResume: "Curated",
-      })
-    );
-
-    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
-    expect(call.system).toContain("Extract every number, percentage, dollar amount");
-    expect(call.system).toContain("exact same value in the original");
-  });
-
-  it("hallucinationsFound schema description covers metrics and notes education is pre-populated", async () => {
+  it("hallucinationsFound schema description scopes to fabricated facts and excludes rewrites", async () => {
     await POST(
       makeRequest({
         resumeText: "Resume",
@@ -173,11 +164,12 @@ describe("POST /api/evaluate-resume", () => {
 
     const call = vi.mocked(generateObject).mock.calls[0][0] as { schema: { shape: Record<string, { description: string }> } };
     const desc = call.schema.shape.hallucinationsFound.description;
-    expect(desc).toContain("metric");
-    // Education is deterministically restored — description should say so
+    // Should describe fabricated facts, not rewrites
+    expect(desc.toLowerCase()).toContain("fabricated");
+    // Should note that numeric and education are handled elsewhere
     expect(desc.toLowerCase()).toContain("education");
-    expect(desc.toLowerCase()).toContain("verbatim");
-    // Should NOT include old education-as-hallucination conditions
+    expect(desc.toLowerCase()).toContain("numeric");
+    // Should NOT include old strict conditions
     expect(desc).not.toContain("institution name");
     expect(desc).not.toContain("degree level");
   });

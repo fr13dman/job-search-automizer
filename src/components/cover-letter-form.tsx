@@ -101,9 +101,10 @@ export function CoverLetterForm() {
 
   const { completion, isLoading, complete, error } = useCompletion({
     api: "/api/generate",
-    streamProtocol: "data",
+    streamProtocol: "text",
     onFinish: async (_prompt, completion) => {
       console.log("[CoverLetterForm] Generation finished, length:", completion.length);
+      if (!completion) return; // stream resolved empty — likely a silent API error, no toast
       toast.success("Cover letter generated!");
       const { fireConfetti } = await import("@/lib/confetti");
       fireConfetti("coverLetter");
@@ -120,7 +121,7 @@ export function CoverLetterForm() {
     stop: stopCurateResume,
   } = useCompletion({
     api: "/api/curate-resume",
-    streamProtocol: "data",
+    streamProtocol: "text",
     onError: (err) => {
       console.error("[CoverLetterForm] Curate resume error:", err);
       if (!abortControllerRef.current?.signal.aborted) {

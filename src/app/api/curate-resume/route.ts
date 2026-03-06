@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toTextStreamResponse();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[/api/curate-resume] Error:", error);
