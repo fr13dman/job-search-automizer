@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { extractJobDescription } from "@/lib/scrape-job";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { extractJobDescription, scrapeJobUrl } from "@/lib/scrape-job";
 
 describe("extractJobDescription", () => {
   it("extracts text from <main> content", () => {
@@ -96,5 +96,95 @@ describe("extractJobDescription", () => {
     const result = extractJobDescription(html);
     expect(result.success).toBe(true);
     expect(result.jobDescription).toBe("Actual job content here.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scrapeJobUrl — Greenhouse API integration
+// ---------------------------------------------------------------------------
+
+const GREENHOUSE_JOB = {
+  title: "Senior Engineer",
+  company_name: "Acme Inc",
+  location: { name: "Remote" },
+  content:
+    "&lt;p&gt;We are looking for a &lt;strong&gt;Senior Engineer&lt;/strong&gt; to join our team.&lt;/p&gt;",
+};
+
+function makeGreenhouseFetch(job: unknown, status = 200) {
+  return vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => job,
+    text: async () => JSON.stringify(job),
+  });
+}
+
+describe("scrapeJobUrl — Greenhouse integration", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("fetches from Greenhouse API when URL has gh_jid param", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(makeGreenhouseFetch(GREENHOUSE_JOB) as typeof fetch);
+
+    const result = await scrapeJobUrl("https://www.acme.com/careers/job?gh_jid=12345");
+
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toContain("Senior Engineer");
+    expect(result.jobDescription).toContain("Acme Inc");
+    expect(result.jobDescription).toContain("Remote");
+    // HTML tags stripped
+    expect(result.jobDescription).not.toContain("<p>");
+    expect(result.jobDescription).not.toContain("&lt;");
+  });
+
+  it("calls correct Greenhouse API URL for gh_jid embed", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(makeGreenhouseFetch(GREENHOUSE_JOB) as typeof fetch);
+
+    await scrapeJobUrl("https://www.fivetran.com/careers/job?gh_jid=7653046003");
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://boards-api.greenhouse.io/v1/boards/fivetran/jobs/7653046003",
+      expect.anything()
+    );
+  });
+
+  it("fetches from Greenhouse API for boards.greenhouse.io URLs", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(makeGreenhouseFetch(GREENHOUSE_JOB) as typeof fetch);
+
+    const result = await scrapeJobUrl("https://boards.greenhouse.io/acme/jobs/12345");
+
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toContain("Senior Engineer");
+  });
+
+  it("falls back to page scraping when Greenhouse API returns non-ok", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch")
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}), text: async () => "" } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => "<html><body><main>Job details from page</main></body></html>",
+      } as Response);
+
+    const result = await scrapeJobUrl("https://www.acme.com/careers/job?gh_jid=99");
+
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toContain("Job details from page");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("decodes HTML entities in Greenhouse content", async () => {
+    const job = {
+      ...GREENHOUSE_JOB,
+      content: "&lt;p&gt;Salary: $100,000 &amp; equity &mdash; great benefits&lt;/p&gt;",
+    };
+    vi.spyOn(global, "fetch").mockImplementation(makeGreenhouseFetch(job) as typeof fetch);
+
+    const result = await scrapeJobUrl("https://company.com/jobs?gh_jid=1");
+
+    expect(result.jobDescription).toContain("$100,000 & equity");
+    expect(result.jobDescription).toContain("—");
+    expect(result.jobDescription).not.toContain("&amp;");
+    expect(result.jobDescription).not.toContain("&mdash;");
   });
 });

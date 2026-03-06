@@ -4,6 +4,88 @@ import type { ScrapeResult } from "@/types";
 const MAX_LENGTH = 10_000;
 const STRIP_TAGS = ["script", "style", "nav", "footer", "header", "noscript", "svg", "img"];
 
+// ---------------------------------------------------------------------------
+// Greenhouse API integration
+// Handles custom-domain embeds (?gh_jid=) and direct Greenhouse board URLs.
+// ---------------------------------------------------------------------------
+
+interface GreenhouseJob {
+  title?: string;
+  company_name?: string;
+  location?: { name?: string };
+  content?: string;
+}
+
+function decodeGreenhouseContent(raw: string): string {
+  // The `content` field is HTML-entity-encoded HTML; decode then strip tags.
+  return raw
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&mdash;/g, "—")
+    .replace(/&ndash;/g, "–")
+    .replace(/<[^>]+>/g, " ");
+}
+
+async function tryGreenhouseApi(url: string): Promise<ScrapeResult | null> {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    let boardToken: string | null = null;
+    let jobId: string | null = null;
+
+    // Direct Greenhouse-hosted boards: boards.greenhouse.io/BOARD/jobs/ID
+    if (hostname === "boards.greenhouse.io" || hostname === "job-boards.greenhouse.io") {
+      const match = parsed.pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);
+      if (match) {
+        boardToken = match[1];
+        jobId = match[2];
+      }
+    }
+
+    // Custom-domain embed with ?gh_jid=ID (e.g. fivetran.com/careers/job?gh_jid=123)
+    const ghJid = parsed.searchParams.get("gh_jid");
+    if (ghJid && !jobId) {
+      jobId = ghJid;
+      // Derive board token from SLD: "www.fivetran.com" → "fivetran"
+      boardToken = hostname.replace(/^www\./, "").split(".")[0];
+    }
+
+    if (!boardToken || !jobId) return null;
+
+    const apiUrl = `https://boards-api.greenhouse.io/v1/boards/${boardToken}/jobs/${jobId}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as GreenhouseJob;
+    if (!data.content) return null;
+
+    const body = decodeGreenhouseContent(data.content);
+    const header = [
+      data.title && `Job Title: ${data.title}`,
+      data.company_name && `Company: ${data.company_name.trim()}`,
+      data.location?.name && `Location: ${data.location.name}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    let text = header ? `${header}\n\n${body}` : body;
+    text = text.replace(/\s+/g, " ").trim();
+    if (text.length > MAX_LENGTH) text = text.slice(0, MAX_LENGTH);
+
+    return { success: true, jobDescription: text };
+  } catch {
+    return null;
+  }
+}
+
 export function extractJobDescription(html: string): ScrapeResult {
   if (!html || !html.trim()) {
     return { success: false, error: "Empty or invalid HTML" };
@@ -76,6 +158,10 @@ export function extractJobDescription(html: string): ScrapeResult {
 
 export async function scrapeJobUrl(url: string): Promise<ScrapeResult> {
   try {
+    // Try Greenhouse API first for ?gh_jid= embeds and boards.greenhouse.io URLs
+    const greenhouse = await tryGreenhouseApi(url);
+    if (greenhouse) return greenhouse;
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
 
