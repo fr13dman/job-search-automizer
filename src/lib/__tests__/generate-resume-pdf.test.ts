@@ -10,6 +10,9 @@ const mockSetDrawColor = vi.fn();
 const mockSetLineWidth = vi.fn();
 const mockLine = vi.fn();
 const mockGetTextWidth = vi.fn(() => 10);
+const mockSetFillColor = vi.fn();
+const mockRect = vi.fn();
+const mockSetTextColor = vi.fn();
 
 vi.mock("jspdf", () => ({
   default: function MockJsPDF() {
@@ -19,8 +22,11 @@ vi.mock("jspdf", () => ({
       },
       setFont: mockSetFont,
       setFontSize: mockSetFontSize,
+      setTextColor: mockSetTextColor,
       setDrawColor: mockSetDrawColor,
       setLineWidth: mockSetLineWidth,
+      setFillColor: mockSetFillColor,
+      rect: mockRect,
       line: mockLine,
       splitTextToSize: mockSplitTextToSize,
       text: mockText,
@@ -75,7 +81,8 @@ describe("downloadResumePdf", () => {
   it("draws a divider line after ALL CAPS headings", async () => {
     await downloadResumePdf("EXPERIENCE");
     expect(mockLine).toHaveBeenCalled();
-    expect(mockSetDrawColor).toHaveBeenCalledWith(180, 180, 180);
+    // Orange accent line (matches template)
+    expect(mockSetDrawColor).toHaveBeenCalledWith(197, 90, 17);
   });
 
   it("renders bullet lines with a bullet character", async () => {
@@ -142,9 +149,9 @@ describe("downloadResumePdf", () => {
   it("renders the first line (candidate name) bold with larger font", async () => {
     await downloadResumePdf("John Doe\nSoftware Engineer\n\nEXPERIENCE");
 
-    // NAME_FONT_SIZE = 13.5 (BODY 8.5 + 5)
+    // NAME_FS = 20
     const nameFontSizeCall = mockSetFontSize.mock.calls.find(
-      (call: unknown[]) => call[0] === 8.5 + 5
+      (call: unknown[]) => call[0] === 20
     );
     expect(nameFontSizeCall).toBeDefined();
 
@@ -166,12 +173,12 @@ describe("downloadResumePdf", () => {
   it("renders only the first 2 lines as header (3rd line uses normal font)", async () => {
     await downloadResumePdf("John Doe\nSoftware Engineer\njohn@email.com\n\nEXPERIENCE");
 
-    // Contact line should NOT use NAME_FONT_SIZE
+    // Contact line should NOT use NAME_FS (20pt); only the name line does
     const nameFontSizeCalls = mockSetFontSize.mock.calls.filter(
-      (call: unknown[]) => call[0] === 8.5 + 5
+      (call: unknown[]) => call[0] === 20
     );
-    // Should only be called twice (for the 2 header lines)
-    expect(nameFontSizeCalls.length).toBe(2);
+    // Only the first line (name) uses 20pt
+    expect(nameFontSizeCalls.length).toBe(1);
   });
 
   it("renders inline **bold** segments with bold font inside experience section", async () => {

@@ -22,9 +22,9 @@ export function CuratedResume({ completion, isLoading, jobDescription = "" }: Cu
   async function handleDownloadDocx() {
     setIsDownloadingDocx(true);
     try {
-      const { downloadDocx } = await import("@/lib/generate-docx");
+      const { downloadResumeDocx } = await import("@/lib/generate-resume-docx");
       const filename = buildResumeFilename(completion, jobDescription);
-      await downloadDocx(completion, `${filename}.docx`);
+      await downloadResumeDocx(completion, `${filename}.docx`);
       toast.success("Resume downloaded as DOCX!");
     } catch (err) {
       console.error("[CuratedResume] DOCX download error:", err);

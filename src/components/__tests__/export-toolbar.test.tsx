@@ -88,7 +88,11 @@ describe("ExportToolbar", () => {
     await user.click(btn);
 
     await waitFor(() => {
-      expect(downloadDocx).toHaveBeenCalledWith("Some text", "co-test-cover-letter.docx");
+      expect(downloadDocx).toHaveBeenCalledWith(
+        "Some text",
+        { candidateName: "Test", companyName: "Co" },
+        "co-test-cover-letter.docx"
+      );
     });
   });
 

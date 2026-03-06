@@ -46,6 +46,11 @@ Writing rules:
 - Use the candidate's name from the resume if available.
 - Format as a proper cover letter with greeting and sign-off.
 
+Layout rules (the document template handles these automatically — do NOT duplicate them):
+- Do NOT include a sender contact block at the top (no name header, no address, no phone number, no email, no date line, no recipient address block).
+- Start the output directly with the salutation line (e.g. "Dear [Name],").
+- In the sign-off, write only the closing phrase and the candidate's name — do NOT add phone number, email, address, or any other contact details after the name.
+
 Strict no-hallucination rule:
 - Every skill, technology, tool, methodology, job title, company, achievement, and metric you mention MUST appear verbatim or as a clear paraphrase of something explicitly stated in the provided resume.
 - If a skill or technology is mentioned in the job description but NOT in the resume, do NOT include it — not even as an aspiration or soft mention.

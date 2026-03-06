@@ -36,6 +36,9 @@ export interface PdfMetadata {
   candidateName?: string;
   companyName?: string;
   jobTitle?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
 }
 
 export interface ResumeEvaluation {

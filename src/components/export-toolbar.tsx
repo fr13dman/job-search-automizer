@@ -11,6 +11,7 @@ import { toast } from "sonner";
 interface ExportToolbarProps {
   text: string;
   jobDescription: string;
+  resumeText?: string;
   isLoading: boolean;
 }
 
@@ -18,7 +19,7 @@ function stripMarkdownBold(text: string): string {
   return text.replace(/\*\*([^*]+)\*\*/g, "$1");
 }
 
-export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbarProps) {
+export function ExportToolbar({ text, jobDescription, resumeText = "", isLoading }: ExportToolbarProps) {
   const [copied, setCopied] = useState(false);
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false);
 
@@ -34,7 +35,7 @@ export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbar
   }
 
   function handleDownloadPdf() {
-    const metadata = extractMetadata(text, jobDescription);
+    const metadata = extractMetadata(text, jobDescription, resumeText);
     const filename = buildPdfFilename(metadata);
     console.log("[ExportToolbar] PDF metadata:", metadata, "filename:", filename);
     downloadPdf(text, metadata, filename);
@@ -44,9 +45,9 @@ export function ExportToolbar({ text, jobDescription, isLoading }: ExportToolbar
   async function handleDownloadDocx() {
     setIsDownloadingDocx(true);
     try {
-      const metadata = extractMetadata(text, jobDescription);
+      const metadata = extractMetadata(text, jobDescription, resumeText);
       const filename = buildCoverLetterDocxFilename(metadata);
-      await downloadDocx(text, filename);
+      await downloadDocx(text, metadata, filename);
       toast.success("DOCX downloaded");
     } catch {
       toast.error("Failed to download DOCX");

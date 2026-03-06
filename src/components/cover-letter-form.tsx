@@ -377,6 +377,7 @@ export function CoverLetterForm() {
               <ExportToolbar
                 text={outputText || completion}
                 jobDescription={jobDescription}
+                resumeText={resumeText}
                 isLoading={isLoading}
               />
             </div>

@@ -1,4 +1,30 @@
 /**
+ * Strip any letter header block that precedes the salutation ("Dear ...").
+ * The template renders sender contact info and date in its own left panel, so
+ * those lines must not appear in the right-column letter body.
+ * Also strips trailing phone/email lines from the sign-off block.
+ */
+export function stripLetterHeader(text: string): string {
+  const lines = text.split("\n");
+
+  // Find the first salutation line
+  const dearIdx = lines.findIndex((l) => /^\s*dear[\s,]/i.test(l.trim()));
+  if (dearIdx > 0) {
+    // Drop everything before "Dear ..."
+    return lines.slice(dearIdx).join("\n").trimStart();
+  }
+
+  // If no "Dear" found (unusual), strip leading lines that look like contact info:
+  // phone numbers, email addresses, or pure address/date lines.
+  const contactRe = /[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/i;
+  let start = 0;
+  while (start < lines.length && (contactRe.test(lines[start]) || lines[start].trim() === "")) {
+    start++;
+  }
+  return lines.slice(start).join("\n").trimStart();
+}
+
+/**
  * Strip __curated text__ double-underscore markers while preserving the inner text.
  * Used before PDF rendering so curated phrases appear as plain text.
  */
