@@ -99,7 +99,7 @@ export function CoverLetterForm() {
   const [isCancelling, setIsCancelling] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const { completion, isLoading, complete, error } = useCompletion({
+  const { completion, isLoading, complete, stop: stopCoverLetter, error } = useCompletion({
     api: "/api/generate",
     streamProtocol: "text",
     onFinish: async (_prompt, completion) => {
@@ -137,6 +137,11 @@ export function CoverLetterForm() {
       resumeTextLength: resumeText.length,
       tone,
     });
+
+    // Abort any in-flight previous generation before starting a new one
+    abortControllerRef.current?.abort();
+    stopCoverLetter();
+    stopCurateResume();
 
     setOutputText("");
     setEvaluationResult(null);
@@ -217,7 +222,7 @@ export function CoverLetterForm() {
               console.log(
                 `[CoverLetterForm] Evaluation attempt ${attempt}: atsScore=${evaluation!.atsScore}, hallucinationsFound=${evaluation!.hallucinationsFound}`
               );
-              if (passed) {
+              if (!controller.signal.aborted && passed) {
                 toast.success("Resume curated!");
                 const { fireConfetti } = await import("@/lib/confetti");
                 fireConfetti("resume");
