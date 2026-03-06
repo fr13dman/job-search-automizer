@@ -9,6 +9,13 @@ const mockEvaluationResult = {
   overallAssessment: "Strong resume with good keyword coverage.",
 };
 
+// Allow tests to override the numeric fidelity check
+let numericFidelityResult = { passed: true, mismatches: [] as string[] };
+
+vi.mock("@/lib/check-numeric-fidelity", () => ({
+  checkNumericFidelity: vi.fn(() => numericFidelityResult),
+}));
+
 vi.mock("ai", () => ({
   generateObject: vi.fn(async () => ({ object: mockEvaluationResult })),
 }));
@@ -33,6 +40,8 @@ describe("POST /api/evaluate-resume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(generateObject).mockResolvedValue({ object: mockEvaluationResult } as never);
+    // Reset numeric fidelity to passing state by default
+    numericFidelityResult = { passed: true, mismatches: [] };
   });
 
   it("returns the evaluation object as JSON", async () => {
@@ -94,7 +103,7 @@ describe("POST /api/evaluate-resume", () => {
     expect(call.system.toLowerCase()).toContain("hallucination");
   });
 
-  it("system prompt contains EDUCATION INTEGRITY rule", async () => {
+  it("system prompt notes EDUCATION section is pre-populated (no LLM check needed)", async () => {
     await POST(
       makeRequest({
         resumeText: "Resume",
@@ -104,11 +113,14 @@ describe("POST /api/evaluate-resume", () => {
     );
 
     const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
-    expect(call.system).toContain("EDUCATION INTEGRITY");
-    expect(call.system.toLowerCase()).toContain("school names");
+    // Education is deterministically restored before evaluation — prompt should reflect this
+    expect(call.system.toLowerCase()).toContain("education section");
+    expect(call.system.toLowerCase()).toContain("verbatim");
+    // Should NOT contain the old LLM-based education integrity check
+    expect(call.system).not.toContain("EDUCATION INTEGRITY");
   });
 
-  it("system prompt contains METRICS INTEGRITY rule", async () => {
+  it("system prompt defers numeric checks to deterministic layer (no LLM metric comparison)", async () => {
     await POST(
       makeRequest({
         resumeText: "Resume",
@@ -118,8 +130,48 @@ describe("POST /api/evaluate-resume", () => {
     );
 
     const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
-    expect(call.system).toContain("METRICS INTEGRITY");
-    expect(call.system.toLowerCase()).toContain("numeric achievement");
+    // Numeric verification is done by checkNumericFidelity in code — LLM should not re-check
+    expect(call.system).not.toContain("METRICS INTEGRITY");
+    expect(call.system.toLowerCase()).toContain("deterministic");
+    expect(call.system.toLowerCase()).toContain("numeric");
+  });
+
+  it("system prompt frames hallucination check as fabricated facts, not narrative rewrites", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
+    expect(call.system).toContain("FABRICATED FACTS CHECK");
+    // Should explicitly say rewriting is NOT a hallucination
+    expect(call.system.toLowerCase()).toContain("rewriting");
+    // Should NOT use the old strict "one failure = true" framing
+    expect(call.system).not.toContain("one failure = true");
+  });
+
+  it("hallucinationsFound schema description scopes to fabricated facts and excludes rewrites", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { schema: { shape: Record<string, { description: string }> } };
+    const desc = call.schema.shape.hallucinationsFound.description;
+    // Should describe fabricated facts, not rewrites
+    expect(desc.toLowerCase()).toContain("fabricated");
+    // Should note that numeric and education are handled elsewhere
+    expect(desc.toLowerCase()).toContain("education");
+    expect(desc.toLowerCase()).toContain("numeric");
+    // Should NOT include old strict conditions
+    expect(desc).not.toContain("institution name");
+    expect(desc).not.toContain("degree level");
   });
 
   it("returns 400 when resumeText is missing", async () => {
@@ -242,5 +294,159 @@ describe("POST /api/evaluate-resume", () => {
 
     const data = await res.json();
     expect(data.details).toContain("rate limit exceeded");
+  });
+
+  // Option A: deterministic numeric fidelity check
+  it("forces hallucinationsFound:true when numeric check fails even if LLM returns false", async () => {
+    numericFidelityResult = {
+      passed: false,
+      mismatches: ["Metric '40%' from original resume not found in curated resume"],
+    };
+
+    const res = await POST(
+      makeRequest({
+        resumeText: "Improved efficiency by 40%.",
+        jobDescription: "Job",
+        curatedResume: "Improved efficiency by 50%.",
+      })
+    );
+
+    const data = await res.json();
+    expect(data.hallucinationsFound).toBe(true);
+  });
+
+  it("adds deterministic mismatch strings to hallucinationDetails", async () => {
+    numericFidelityResult = {
+      passed: false,
+      mismatches: ["Metric '40%' from original resume not found in curated resume"],
+    };
+
+    const res = await POST(
+      makeRequest({
+        resumeText: "Improved efficiency by 40%.",
+        jobDescription: "Job",
+        curatedResume: "Improved efficiency by 50%.",
+      })
+    );
+
+    const data = await res.json();
+    expect(data.hallucinationDetails).toContain(
+      "Metric '40%' from original resume not found in curated resume"
+    );
+  });
+
+  it("preserves LLM hallucinationDetails alongside deterministic mismatches", async () => {
+    vi.mocked(generateObject).mockResolvedValueOnce({
+      object: {
+        ...mockEvaluationResult,
+        hallucinationsFound: true,
+        hallucinationDetails: ["Invented skill: Kubernetes"],
+      },
+    } as never);
+    numericFidelityResult = {
+      passed: false,
+      mismatches: ["Metric '40%' from original resume not found in curated resume"],
+    };
+
+    const res = await POST(
+      makeRequest({
+        resumeText: "Improved efficiency by 40%.",
+        jobDescription: "Job",
+        curatedResume: "Improved efficiency by 50%.",
+      })
+    );
+
+    const data = await res.json();
+    expect(data.hallucinationDetails).toContain("Invented skill: Kubernetes");
+    expect(data.hallucinationDetails).toContain(
+      "Metric '40%' from original resume not found in curated resume"
+    );
+  });
+
+  it("leaves result unchanged when numeric check passes", async () => {
+    numericFidelityResult = { passed: true, mismatches: [] };
+
+    const res = await POST(
+      makeRequest({
+        resumeText: "Improved efficiency by 40%.",
+        jobDescription: "Job",
+        curatedResume: "Improved efficiency by 40%.",
+      })
+    );
+
+    const data = await res.json();
+    expect(data.hallucinationsFound).toBe(false);
+    expect(data.hallucinationDetails).toHaveLength(0);
+  });
+
+  // Bloat detection tests
+  it("BLOAT: forces hallucinationsFound:true when curated is >150% longer than original", async () => {
+    const original = "Jane Doe\nSoftware Engineer\nBuilt web apps with React.";
+    // Curated is > 150% longer by word count and > 150 extra words
+    const curated = Array.from(
+      { length: 200 },
+      (_, i) => `Extra fabricated line ${i}`
+    ).join("\n");
+
+    const res = await POST(
+      makeRequest({
+        resumeText: original,
+        jobDescription: "Senior Engineer role",
+        curatedResume: curated,
+      })
+    );
+
+    const data = await res.json();
+    expect(data.hallucinationsFound).toBe(true);
+  });
+
+  it("BLOAT: adds a descriptive detail message when curated is bloated", async () => {
+    const original = "Jane Doe\nEngineer\nBuilt systems.";
+    const curated = Array.from({ length: 200 }, (_, i) => `Bloat line ${i}`).join("\n");
+
+    const res = await POST(
+      makeRequest({
+        resumeText: original,
+        jobDescription: "Job",
+        curatedResume: curated,
+      })
+    );
+
+    const data = await res.json();
+    expect(data.hallucinationDetails.some((d: string) => d.toLowerCase().includes("longer"))).toBe(true);
+  });
+
+  it("BLOAT: does NOT flag when curated is only moderately longer than original", async () => {
+    // 1.3x longer — not bloated (within acceptable threshold)
+    const original = Array.from({ length: 100 }, (_, i) => `Original word ${i}`).join(" ");
+    const curated = Array.from({ length: 130 }, (_, i) => `Curated word ${i}`).join(" ");
+
+    const res = await POST(
+      makeRequest({
+        resumeText: original,
+        jobDescription: "Job",
+        curatedResume: curated,
+      })
+    );
+
+    const data = await res.json();
+    // LLM mock returns hallucinationsFound: false; bloat check should not fire
+    expect(data.hallucinationDetails.some((d: string) => d.toLowerCase().includes("longer"))).toBe(false);
+  });
+
+  it("system prompt HALLUCINATION CHECK allows reasonable JD keyword additions", async () => {
+    await POST(
+      makeRequest({
+        resumeText: "Resume",
+        jobDescription: "Job",
+        curatedResume: "Curated",
+      })
+    );
+
+    const call = vi.mocked(generateObject).mock.calls[0][0] as { system: string };
+    // The prompt should explicitly say keyword additions are NOT hallucinations
+    expect(call.system).toContain("Do NOT flag");
+    // Should not contain the old overly strict "a tool not mentioned" language
+    expect(call.system).not.toContain("a tool not mentioned");
   });
 });

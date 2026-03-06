@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
 
     return result.toTextStreamResponse();
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error("[/api/generate] Error:", error);
     return NextResponse.json(
-      { error: "Failed to generate cover letter" },
+      { error: message || "Failed to generate cover letter" },
       { status: 500 }
     );
   }

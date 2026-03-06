@@ -60,4 +60,41 @@ describe("extractJobDescription", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
   });
+
+  it("extracts job description from JSON-LD JobPosting when body is empty (Workday SPA)", () => {
+    const html = `<html><head>
+      <script type="application/ld+json">{"@type":"JobPosting","title":"Manager, Software Engineering","description":"Manage software teams and deliver projects at scale."}</script>
+    </head><body></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toContain("Manage software teams");
+  });
+
+  it("falls back to og:description meta tag when body is empty and no JSON-LD", () => {
+    const html = `<html><head>
+      <meta property="og:description" content="Senior engineer role at Acme Corp building distributed systems." />
+    </head><body></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toContain("Senior engineer role at Acme Corp");
+  });
+
+  it("prefers body text over JSON-LD when body content is longer", () => {
+    const bodyContent = "Full job description with many details. ".repeat(20);
+    const html = `<html><head>
+      <script type="application/ld+json">{"@type":"JobPosting","description":"Short summary."}</script>
+    </head><body><main>${bodyContent}</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toContain("Full job description");
+  });
+
+  it("ignores non-JobPosting JSON-LD types", () => {
+    const html = `<html><head>
+      <script type="application/ld+json">{"@type":"Organization","name":"Acme Corp"}</script>
+    </head><body><main>Actual job content here.</main></body></html>`;
+    const result = extractJobDescription(html);
+    expect(result.success).toBe(true);
+    expect(result.jobDescription).toBe("Actual job content here.");
+  });
 });

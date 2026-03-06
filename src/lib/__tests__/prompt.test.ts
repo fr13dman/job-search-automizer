@@ -228,6 +228,37 @@ describe("buildCurateResumePrompt", () => {
     expect(result.system).toContain("silently dropped");
   });
 
+  it("system prompt requires verbatim copy of identity and education fields", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Identity and education fields");
+    expect(result.system).toContain("character-for-character");
+  });
+
+  it("system prompt prohibits altering education: school, degree, major, year", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("school name");
+    expect(result.system).toContain("degree name");
+    expect(result.system).toContain("graduation year");
+  });
+
+  it("system prompt prohibits rounding or paraphrasing numeric metrics", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Numeric metrics");
+    expect(result.system).toContain("exact same number");
+  });
+
+  it("system prompt allows skills inference from explicitly-named accomplishments", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Skills inference from accomplishments");
+    expect(result.system).toContain("directly and unambiguously named");
+  });
+
+  it("system prompt requires a SUMMARY section with job-relevant skills", () => {
+    const result = buildCurateResumePrompt("Resume", "Job");
+    expect(result.system).toContain("Summary section");
+    expect(result.system).toContain("SUMMARY");
+  });
+
   it("system prompt includes 'Accomplished [X] as measured by [Y] by doing [Z]' pattern", () => {
     const result = buildCurateResumePrompt("Resume", "Job");
     expect(result.system).toContain("Accomplished [X] as measured by [Y] by doing [Z]");

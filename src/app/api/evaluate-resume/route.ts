@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
+import { checkNumericFidelity } from "@/lib/check-numeric-fidelity";
 
 const EvaluationSchema = z.object({
   atsScore: z
@@ -18,11 +19,11 @@ const EvaluationSchema = z.object({
   hallucinationsFound: z
     .boolean()
     .describe(
-      "True if any skill, technology, company, school, degree, date, or achievement in the curated resume cannot be verified against the original resume"
+      "True only if the curated resume contains a claim that is entirely fabricated with no basis in the original — an invented employer, an invented role, or a specific project/achievement the candidate never performed. Rewriting, rephrasing, and professionalising existing content is NOT a hallucination. Numeric values and the education section are verified by separate deterministic checks and do not need to be assessed here."
     ),
   hallucinationDetails: z
     .array(z.string())
-    .describe("Specific items in the curated resume that are not present in the original resume"),
+    .describe("Specific claims in the curated resume that are entirely fabricated with no traceable basis in the original resume (e.g. invented employer, invented project, invented role). Do not list narrative rewrites or phrasing improvements."),
   overallAssessment: z
     .string()
     .describe("2–3 sentence summary of the resume's ATS readiness and quality"),
@@ -52,6 +53,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const numericCheck = checkNumericFidelity(resumeText, curatedResume);
+    console.log("[/api/evaluate-resume] Numeric fidelity check", {
+      passed: numericCheck.passed,
+      mismatchCount: numericCheck.mismatches.length,
+    });
+
+    // Deterministic bloat check: curated resume must not be dramatically longer than the
+    // original. A ratio > 1.5 with > 150 extra words strongly suggests the LLM or a
+    // post-processing step duplicated or injected content.
+    const originalWordCount = resumeText.split(/\s+/).filter(Boolean).length;
+    const curatedWordCount = curatedResume.split(/\s+/).filter(Boolean).length;
+    const bloatRatio = curatedWordCount / Math.max(originalWordCount, 1);
+    const isBloated = bloatRatio > 1.5 && curatedWordCount - originalWordCount > 150;
+    console.log("[/api/evaluate-resume] Bloat check", {
+      originalWordCount,
+      curatedWordCount,
+      bloatRatio: bloatRatio.toFixed(2),
+      isBloated,
+    });
+    const bloatDetails = isBloated
+      ? [
+          `Curated resume (${curatedWordCount} words) is ${Math.round((bloatRatio - 1) * 100)}% longer than the original (${originalWordCount} words) — likely contains duplicated or fabricated content`,
+        ]
+      : [];
+
     const model = "claude-sonnet-4-5-20250929";
     console.log("[/api/evaluate-resume] Calling generateObject", {
       model,
@@ -69,13 +95,29 @@ export async function POST(request: NextRequest) {
 2. A job description
 3. A CURATED resume that was rewritten to match the job description
 
-Perform three independent checks:
+The curated resume was produced by an AI that rewrote the original to be more concise, professional, and ATS-optimised. Rewriting, rephrasing, condensing, and adding JD-relevant keywords supported by the original experience are all expected and correct — do NOT flag these.
 
-HALLUCINATION CHECK: Compare the curated resume line by line against the original. Flag any skill, technology, tool, company name, school name, degree, job title, achievement, metric, or date that appears in the curated resume but cannot be found in or reasonably inferred from the original resume. Even subtle substitutions (e.g. a different university, a slightly inflated metric, a tool not mentioned) must be flagged. Be thorough.
+ALREADY VERIFIED BY DETERMINISTIC CHECKS (do not re-check):
+- All numeric values and statistics — a separate code-level check has already verified every number in the original appears in the curated resume with the same value.
+- The EDUCATION section — it has been replaced verbatim from the original before this evaluation.
 
-EDUCATION INTEGRITY: School names, degree names (e.g. "Bachelor of Science"), graduation years, and majors must match the original resume verbatim. Any deviation — even a synonymous institution name or partial degree name — must be flagged.
+FABRICATED FACTS CHECK:
+Only set hallucinationsFound to true when the curated resume contains a claim that has NO basis whatsoever in the original — a clear invention, not a rewrite. Ask yourself: "Is there any work, project, or experience in the original that this could reasonably be describing?" If yes, it is not a hallucination.
 
-METRICS INTEGRITY: Any numeric achievement (e.g. "increased revenue by 40%", "managed team of 12") must appear in the original resume with the same number. Do not allow paraphrasing of metrics; they are either exact or hallucinated.
+Flag ONLY these (genuine fabrications with no basis in the original):
+- A company name or employer that does not appear anywhere in the original
+- A completely different role or job function (e.g. original: accountant; curated: software engineer)
+- A specific project or product that is entirely invented with no connection to any work described in the original (e.g. "Founded and led a startup" when the original contains no mention of it)
+- A technology or tool completely absent from the original AND not reasonably inferable from listed tools (e.g. Kubernetes when the original only mentions Excel; NOT TypeScript when original mentions JavaScript)
+
+Do NOT flag these (they are expected curation):
+- Rephrasing, condensing, or professionally rewriting described work
+- Stronger action verbs, active voice, cleaner formatting
+- A SUMMARY section that reflects the candidate's actual background
+- JD keywords added where the candidate demonstrably has the underlying experience
+- Technologies reasonably implied by listed tools (CSS by React, SQL by PostgreSQL, etc.)
+- Upgraded or clarified job title phrasing within the same function (e.g. "developer" → "software engineer", "engineer" → "senior engineer" if experience supports it)
+- Removing filler, informal language, or irrelevant detail
 
 ATS KEYWORD ANALYSIS: Extract all important keywords, skills, technologies, methodologies, and role-relevant phrases from the job description. For each, check whether it appears (verbatim or as a clear synonym) in the curated resume. Report matches and gaps separately.
 
@@ -99,7 +141,17 @@ Evaluate the curated resume against the original and the job description. Return
       missingKeywordCount: object.missingKeywords.length,
     });
 
-    return NextResponse.json(object);
+    const mergedObject = {
+      ...object,
+      hallucinationsFound:
+        object.hallucinationsFound || !numericCheck.passed || isBloated,
+      hallucinationDetails: [
+        ...object.hallucinationDetails,
+        ...numericCheck.mismatches,
+        ...bloatDetails,
+      ],
+    };
+    return NextResponse.json(mergedObject);
   } catch (error) {
     const errorName = error instanceof Error ? error.constructor.name : "UnknownError";
     const errorMessage = error instanceof Error ? error.message : String(error);
