@@ -46,10 +46,7 @@ function drawOrangeStripe(doc: jsPDF) {
   doc.rect(0, 0, STRIPE_W, PAGE_H, "F");
 }
 
-export async function downloadResumePdf(
-  resumeText: string,
-  filename = "curated-resume.pdf"
-): Promise<void> {
+function buildResumeDoc(resumeText: string): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   drawOrangeStripe(doc);
 
@@ -218,5 +215,16 @@ export async function downloadResumePdf(
     }
   }
 
-  doc.save(filename);
+  return doc;
+}
+
+export async function downloadResumePdf(
+  resumeText: string,
+  filename = "curated-resume.pdf"
+): Promise<void> {
+  buildResumeDoc(resumeText).save(filename);
+}
+
+export function getResumePdfBlob(resumeText: string): Blob {
+  return buildResumeDoc(resumeText).output("blob") as Blob;
 }

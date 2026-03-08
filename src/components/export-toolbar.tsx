@@ -13,15 +13,25 @@ interface ExportToolbarProps {
   jobDescription: string;
   resumeText?: string;
   isLoading: boolean;
+  metaOverrides?: { companyName?: string; jobTitle?: string };
 }
 
 function stripMarkdownBold(text: string): string {
   return text.replace(/\*\*([^*]+)\*\*/g, "$1");
 }
 
-export function ExportToolbar({ text, jobDescription, resumeText = "", isLoading }: ExportToolbarProps) {
+export function ExportToolbar({ text, jobDescription, resumeText = "", isLoading, metaOverrides }: ExportToolbarProps) {
   const [copied, setCopied] = useState(false);
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false);
+
+  function buildMeta() {
+    const base = extractMetadata(text, jobDescription, resumeText);
+    return {
+      ...base,
+      ...(metaOverrides?.companyName ? { companyName: metaOverrides.companyName } : {}),
+      ...(metaOverrides?.jobTitle ? { jobTitle: metaOverrides.jobTitle } : {}),
+    };
+  }
 
   async function handleCopy() {
     try {
@@ -35,7 +45,7 @@ export function ExportToolbar({ text, jobDescription, resumeText = "", isLoading
   }
 
   function handleDownloadPdf() {
-    const metadata = extractMetadata(text, jobDescription, resumeText);
+    const metadata = buildMeta();
     const filename = buildPdfFilename(metadata);
     console.log("[ExportToolbar] PDF metadata:", metadata, "filename:", filename);
     downloadPdf(text, metadata, filename);
@@ -45,7 +55,7 @@ export function ExportToolbar({ text, jobDescription, resumeText = "", isLoading
   async function handleDownloadDocx() {
     setIsDownloadingDocx(true);
     try {
-      const metadata = extractMetadata(text, jobDescription, resumeText);
+      const metadata = buildMeta();
       const filename = buildCoverLetterDocxFilename(metadata);
       await downloadDocx(text, metadata, filename);
       toast.success("DOCX downloaded");

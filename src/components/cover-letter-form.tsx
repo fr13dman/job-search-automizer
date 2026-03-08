@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { JobInput } from "@/components/job-input";
+import { JobInput, type JobMeta } from "@/components/job-input";
 import { ResumeUpload } from "@/components/resume-upload";
 import { ToneSelector } from "@/components/tone-selector";
 import { CoverLetterOutput } from "@/components/cover-letter-output";
@@ -15,6 +15,7 @@ import { CuratedResume } from "@/components/curated-resume";
 import { ResumeEvaluation } from "@/components/resume-evaluation";
 import { ResumeProgress, type ResumePhase } from "@/components/resume-progress";
 import { ExportToolbar } from "@/components/export-toolbar";
+import { SaveToFolder } from "@/components/save-to-folder";
 import { toast } from "sonner";
 import type { Tone, ResumeEvaluation as ResumeEvaluationType, AttemptRecord } from "@/types";
 import { restoreProtectedFields } from "@/lib/restore-protected-fields";
@@ -82,6 +83,8 @@ function buildEvaluationFeedback(
 
 export function CoverLetterForm() {
   const [jobDescription, setJobDescription] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [jobMeta, setJobMeta] = useState<JobMeta>({ companyName: "", jobTitle: "" });
   const [resumeText, setResumeText] = useState("");
   const [tone, setTone] = useState<Tone>("professional");
   const [outputText, setOutputText] = useState("");
@@ -293,7 +296,11 @@ export function CoverLetterForm() {
             <CardTitle className="text-slate-700 dark:text-slate-200">Input</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
-            <JobInput onJobDescription={setJobDescription} />
+            <JobInput
+              onJobDescription={setJobDescription}
+              onJobUrl={setSourceUrl}
+              onJobMeta={setJobMeta}
+            />
             <Separator />
             <ResumeUpload onResumeText={setResumeText} />
             <Separator />
@@ -366,6 +373,17 @@ export function CoverLetterForm() {
                 {error.message || "Failed to generate cover letter"}
               </div>
             )}
+            {jobDescription && (
+              <SaveToFolder
+                jobDescription={jobDescription}
+                sourceUrl={sourceUrl || undefined}
+                coverLetterText={(outputText || completion) || undefined}
+                curatedResumeText={finalCuratedResume || undefined}
+                resumeText={resumeText}
+                disabled={isBusy}
+                metaOverrides={jobMeta}
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -379,6 +397,7 @@ export function CoverLetterForm() {
                 jobDescription={jobDescription}
                 resumeText={resumeText}
                 isLoading={isLoading}
+                metaOverrides={jobMeta}
               />
             </div>
           </CardHeader>
