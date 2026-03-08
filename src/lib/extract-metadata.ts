@@ -12,48 +12,57 @@ function extractCandidateName(coverLetter: string): string | undefined {
 }
 
 /**
+ * Remove trailing noise from a captured company name: everything after a
+ * dash/pipe/parenthesis that typically follows the name in raw scraped text.
+ */
+function cleanCompanyName(raw: string): string {
+  return raw
+    .replace(/\s*[-–—|]\s*.*$/, "")  // strip after dash / en-dash / em-dash / pipe
+    .replace(/\s*\(.*$/, "")          // strip parenthetical
+    .replace(/[,;]\s*$/, "")          // strip trailing punctuation
+    .trim();
+}
+
+/**
  * Extract the company name from the job description first, then fall back to cover letter.
  */
 function extractCompanyName(coverLetter: string, jobDescription: string): string | undefined {
   // Try job description first — often has "Company: X" or "About X" or "X is hiring"
   const jdPatterns = [
-    // "Company: Acme Corp" or "Company Name: Acme Corp"
-    /company(?:\s+name)?\s*[:]\s*([^\n,]+)/i,
+    // "Company: Acme Corp" or "Company Name: Acme Corp" — anchored to line start so
+    // "About the company: ..." buried in the body doesn't accidentally match first.
+    /^company(?:\s+name)?\s*[:]\s*([^\n,|–—]+)/im,
     // "About Acme Corp" at start of line
     /^about\s+([A-Z][A-Za-z0-9&'. -]+?)(?:\s*\n|$)/im,
     // "Acme Corp is hiring" / "Acme Corp is looking" / "Acme Corp is seeking"
     /^([A-Z][A-Za-z0-9&'. -]+?)\s+is\s+(?:hiring|looking|seeking|searching)/im,
-    // "at Acme Corp" in job description
-    /\bat\s+([A-Z][A-Za-z0-9&'.]+(?:\s+[A-Z][A-Za-z0-9&'.]+){0,3})\b/,
   ];
 
   for (const pattern of jdPatterns) {
     const match = jobDescription.match(pattern);
     if (match) {
-      const name = match[1].trim();
-      // Skip generic words that aren't company names
+      const name = cleanCompanyName(match[1]);
       if (name.length > 1 && !/^(The|A|An|Our|This|We|You)$/i.test(name)) {
         return name;
       }
     }
   }
 
-  // Fall back to cover letter patterns
+  // Fall back to cover letter patterns — max 3 capitalised words to avoid grabbing
+  // a whole phrase, and require a clear stop token after the name.
   const clPatterns = [
     // "Dear [Hiring Manager at] Acme Corp" or "Dear Acme Corp Team"
     /dear\s+(?:.*?\s+at\s+)?([A-Z][A-Za-z0-9&'. -]+?)(?:\s+(?:team|hiring|recruitment))/i,
-    // "at Acme Corp," / "at Acme Corp." / "at Acme Corp as" / "at Acme Corp in" etc.
-    /\b(?:at|join|joining)\s+(?:the\s+)?([A-Z][A-Za-z0-9&'.]+(?:\s+[A-Z][A-Za-z0-9&'.]+){0,3})(?:\s*[,.]|\s+(?:team|as|in|for|is|has|and|where|to|I|that|this|with))/,
-    // "to Acme Corp" in "contribute to Acme Corp" etc.
-    /(?:contribute|contributing)\s+to\s+([A-Z][A-Za-z0-9&'.]+(?:\s+[A-Z][A-Za-z0-9&'.]+){0,3})/,
-    // "working at Acme Corp" / "work at Acme Corp"
-    /work(?:ing)?\s+(?:at|for|with)\s+([A-Z][A-Za-z0-9&'.]+(?:\s+[A-Z][A-Za-z0-9&'.]+){0,3})/,
+    // "at/join/joining Acme Corp," / "at Acme Corp as" etc.
+    /\b(?:at|join|joining)\s+(?:the\s+)?([A-Z][A-Za-z0-9&'.]+(?:\s+[A-Z][A-Za-z0-9&'.]+){0,2})(?:\s*[,.]|\s+(?:team|as|in|for|is|has|and|where|to|the|I|that|this|with))/,
+    // "working at/for/with Acme Corp"
+    /work(?:ing)?\s+(?:at|for|with)\s+([A-Z][A-Za-z0-9&'.]+(?:\s+[A-Z][A-Za-z0-9&'.]+){0,2})/,
   ];
 
   for (const pattern of clPatterns) {
     const match = coverLetter.match(pattern);
     if (match) {
-      const name = match[1].trim();
+      const name = cleanCompanyName(match[1]);
       if (name.length > 1 && !/^(The|A|An|Our|This|We|You)$/i.test(name)) {
         return name;
       }
@@ -160,6 +169,20 @@ export function extractContactInfo(resumeText: string): {
   return { email, phone, address };
 }
 
+/**
+ * Quick helper to pull the two most visible fields from a job description.
+ * Used to pre-populate the user-editable confirmation widget in JobInput.
+ */
+export function extractJobMeta(
+  jobDescription: string,
+  coverLetter = ""
+): { companyName: string; jobTitle: string } {
+  return {
+    companyName: extractCompanyName(coverLetter, jobDescription) ?? "",
+    jobTitle: extractJobTitle(coverLetter, jobDescription) ?? "",
+  };
+}
+
 export function extractMetadata(
   coverLetter: string,
   jobDescription: string,
@@ -225,4 +248,29 @@ export function buildPdfFilename(metadata: PdfMetadata): string {
 
 export function buildCoverLetterDocxFilename(metadata: PdfMetadata): string {
   return buildCoverLetterBasename(metadata) + ".docx";
+}
+
+/**
+ * Build the subfolder name for saved documents: {company}-{mmyyyy}
+ */
+export function buildFolderName(companyName: string, date = new Date()): string {
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${slugify(companyName)}-${mm}${yyyy}`;
+}
+
+/**
+ * Build a filename for the job description PDF.
+ * Format: {company}-{job-title}-job-description.pdf  (no extension in base)
+ */
+export function buildJdPdfFilename(metadata: PdfMetadata): string {
+  const parts: string[] = [];
+  if (metadata.companyName) parts.push(slugify(metadata.companyName));
+  if (metadata.jobTitle) parts.push(slugify(metadata.jobTitle));
+  parts.push("job-description");
+  const full = parts.join("-");
+  if (full.length > MAX_FILENAME_LENGTH && metadata.companyName) {
+    return `${slugify(metadata.companyName)}-job-description.pdf`;
+  }
+  return full + ".pdf";
 }

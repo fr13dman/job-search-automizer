@@ -26,11 +26,7 @@ function isValidMeta(value: string | undefined): value is string {
   return !STOP_WORDS.has(value.trim().toLowerCase());
 }
 
-export function downloadPdf(
-  text: string,
-  metadata: PdfMetadata = {},
-  filename?: string
-) {
+function buildCoverLetterDoc(text: string, metadata: PdfMetadata): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
 
   const { candidateName, companyName, phone, email, address } = metadata;
@@ -38,7 +34,25 @@ export function downloadPdf(
   // Strip bold markers and any header block the model may have included
   const strippedText = stripLetterHeader(text).replace(/\*\*([^*]+)\*\*/g, "$1");
   const rawParagraphs = strippedText.split(/\n\s*\n/);
-  const paragraphs = rawParagraphs.map((p) => p.trim().replace(/\n/g, " ")).filter(Boolean);
+
+  // Build paragraph list, splitting sign-offs ("Sincerely,\nJohn Doe") into
+  // two separate entries so the PDF renders a visible blank line between the
+  // closing greeting and the candidate's name.
+  const paragraphs: string[] = [];
+  for (const raw of rawParagraphs) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const signOff = trimmed.match(
+      /^((?:sincerely|regards|respectfully|best|warmly|cheers|thanks|thank you)[,.]?)\s*\n+([\s\S]+)$/i
+    );
+    if (signOff) {
+      paragraphs.push(signOff[1]);
+      const name = signOff[2].replace(/\n/g, " ").trim();
+      if (name) paragraphs.push(name);
+    } else {
+      paragraphs.push(trimmed.replace(/\n/g, " "));
+    }
+  }
 
   // ── Auto-scale: find the largest font that fits all body text in one page ──
   const contentStartY = HEADER_H + 10;
@@ -146,5 +160,13 @@ export function downloadPdf(
     }
   }
 
-  doc.save(filename ?? "cover-letter.pdf");
+  return doc;
+}
+
+export function downloadPdf(text: string, metadata: PdfMetadata = {}, filename?: string) {
+  buildCoverLetterDoc(text, metadata).save(filename ?? "cover-letter.pdf");
+}
+
+export function getCoverLetterPdfBlob(text: string, metadata: PdfMetadata = {}): Blob {
+  return buildCoverLetterDoc(text, metadata).output("blob") as Blob;
 }
