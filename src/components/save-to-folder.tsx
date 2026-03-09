@@ -113,7 +113,7 @@ export function SaveToFolder({
       // Curated resume PDF
       if (curatedResumeText) {
         const resumeBlob = getResumePdfBlob(curatedResumeText);
-        const resumeFilename = buildResumeFilename("", jobDescription) + ".pdf";
+        const resumeFilename = buildResumeFilename(metadata) + ".pdf";
         files.push({ name: resumeFilename, content: await blobToBase64(resumeBlob) });
       }
 

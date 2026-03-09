@@ -241,4 +241,83 @@ describe("CuratedResume", () => {
     const mono = container.querySelector(".font-mono");
     expect(mono).toBeInTheDocument();
   });
+
+  // metaOverrides regression tests — user-confirmed company/title must appear in filenames
+
+  it("uses metaOverrides companyName and jobTitle in DOCX filename", async () => {
+    render(
+      <CuratedResume
+        completion={"EXPERIENCE\n- Led team"}
+        isLoading={false}
+        metaOverrides={{ companyName: "Stripe", jobTitle: "Staff Engineer" }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /download docx/i }));
+
+    await waitFor(() => {
+      expect(mockDownloadResumeDocx).toHaveBeenCalledWith(
+        "EXPERIENCE\n- Led team",
+        "stripe-staff-engineer-resume.docx"
+      );
+    });
+  });
+
+  it("uses metaOverrides companyName and jobTitle in PDF filename", async () => {
+    render(
+      <CuratedResume
+        completion={"EXPERIENCE\n- Led team"}
+        isLoading={false}
+        metaOverrides={{ companyName: "Stripe", jobTitle: "Staff Engineer" }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+
+    await waitFor(() => {
+      expect(mockDownloadResumePdf).toHaveBeenCalledWith(
+        "EXPERIENCE\n- Led team",
+        "stripe-staff-engineer-resume.pdf"
+      );
+    });
+  });
+
+  it("metaOverrides take precedence over values extracted from jobDescription", async () => {
+    render(
+      <CuratedResume
+        completion={"EXPERIENCE\n- Led team"}
+        isLoading={false}
+        jobDescription={"Company: SomeOtherCo\nJob Title: Product Manager"}
+        metaOverrides={{ companyName: "Stripe", jobTitle: "Staff Engineer" }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /download docx/i }));
+
+    await waitFor(() => {
+      const [, filename] = mockDownloadResumeDocx.mock.calls[0];
+      expect(filename).toBe("stripe-staff-engineer-resume.docx");
+      expect(filename).not.toContain("someotherco");
+      expect(filename).not.toContain("product-manager");
+    });
+  });
+
+  it("falls back to jobDescription extraction when no metaOverrides provided", async () => {
+    render(
+      <CuratedResume
+        completion={"EXPERIENCE\n- Led team"}
+        isLoading={false}
+        jobDescription={"Company: Acme Corp\nJob Title: Senior Developer"}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /download docx/i }));
+
+    await waitFor(() => {
+      expect(mockDownloadResumeDocx).toHaveBeenCalledWith(
+        "EXPERIENCE\n- Led team",
+        "acme-corp-senior-developer-resume.docx"
+      );
+    });
+  });
 });
