@@ -10,10 +10,13 @@ An AI-powered tool that generates tailored cover letters and curated resumes fro
 - [High-Level Architecture](#high-level-architecture)
 - [Feature Breakdown](#feature-breakdown)
   - [Job Description Ingestion](#job-description-ingestion)
+  - [Job Meta Confirmation](#job-meta-confirmation)
   - [Resume Upload](#resume-upload)
   - [Cover Letter Generation](#cover-letter-generation)
   - [Resume Curation Pipeline](#resume-curation-pipeline)
+  - [Company Intelligence](#company-intelligence)
   - [Document Export](#document-export)
+  - [Save to Folder](#save-to-folder)
   - [Filename Generation](#filename-generation)
 - [Test Coverage](#test-coverage)
 - [FAQ](#faq)
@@ -37,10 +40,13 @@ cd job-search-automizer
 # 2. Install dependencies
 npm install
 
-# 3. Set your API key
+# 3. Set your environment variables
 cp .env.example .env.local
 # Then edit .env.local and add:
-# ANTHROPIC_API_KEY=sk-ant-...
+# ANTHROPIC_API_KEY=sk-ant-...      # required
+# TAVILY_API_KEY=tvly-...           # optional – enables web search in Company Intelligence
+# JINA_API_KEY=jina_...             # optional – increases Jina Reader rate limits
+# ROOT_FOLDER=~/Documents/Jobs      # optional – enables "Save to Folder" feature
 
 # 4. Start the dev server
 npm run dev
@@ -76,11 +82,14 @@ vercel deploy --prebuilt --prod
 ```
 Browser (Next.js App Router, single page)
 │
-├── /api/scrape             ← fetches job URL, returns structured JD text
-├── /api/parse-resume       ← parses uploaded PDF/DOCX → plain text
-├── /api/generate           ← streams cover letter (Claude claude-sonnet-4-5)
-├── /api/curate-resume      ← rewrites resume tailored to the job (Claude)
-└── /api/evaluate-resume    ← scores curated resume for ATS fit + hallucinations
+├── /api/scrape               ← fetches job URL, returns structured JD text
+├── /api/parse-resume         ← parses uploaded PDF/DOCX → plain text
+├── /api/generate             ← streams cover letter (Claude Sonnet)
+├── /api/curate-resume        ← rewrites resume tailored to the job (Claude)
+├── /api/evaluate-resume      ← scores curated resume for ATS fit + hallucinations
+├── /api/company-info         ← extracts company description, values, links from JD
+├── /api/company-info-deep    ← deep research via Jina Reader + Tavily web search
+└── /api/save-documents       ← saves PDF/DOCX files to a local folder
 ```
 
 ### Cover Letter Flow
@@ -143,6 +152,19 @@ Regardless of source, a `Job Title: X\nCompany: Y` header is prepended to the bo
 
 ---
 
+### Job Meta Confirmation
+
+**Files:** `src/components/cover-letter-form.tsx`
+
+After a job URL is scraped, the app extracts a **company name** and **job title** from the structured data and surfaces them in an editable confirmation widget. The user can accept the extracted values or correct them before generating.
+
+These confirmed values are used throughout the session:
+- Passed to the Company Intelligence card (enables the "Get More Info" deep research button)
+- Used as the base for PDF/DOCX filenames
+- Passed as context to the cover letter prompt
+
+---
+
 ### Resume Upload
 
 **Files:** `src/lib/parse-resume.ts`, `src/app/api/parse-resume/route.ts`, `src/components/resume-upload.tsx`
@@ -170,6 +192,8 @@ Uses `claude-sonnet-4-5-20250929` via the Vercel AI SDK (`streamText` → `toTex
 - Key achievements wrapped in `**bold**` markdown, rendered as highlighted `<mark>` tags in preview.
 
 An optional free-text "Additional Instructions" field is appended to the prompt.
+
+A **retry button** is available on the cover letter output to regenerate with a new API call without leaving the page.
 
 ---
 
@@ -204,6 +228,50 @@ If hallucinations are found and attempts remain, `buildEvaluationFeedback()` con
 | `hallucinationDetails` | Specific hallucination descriptions (LLM + deterministic) |
 | `overallAssessment` | Short narrative summary |
 
+A **retry button** is available on the curated resume output to restart the agentic curation loop from scratch.
+
+---
+
+### Company Intelligence
+
+**Files:** `src/components/company-info-card.tsx`, `src/app/api/company-info/route.ts`, `src/app/api/company-info-deep/route.ts`, `src/lib/extract-company-links.ts`
+
+A research card that appears once a job description is loaded, giving you intelligence about the company before you apply.
+
+**Basic research** (`/api/company-info`)
+
+Triggered by clicking "Research [Company]". Uses Claude Haiku with `generateObject` to extract from the job description:
+- **About** — 2–3 sentence company summary
+- **Values & Culture** — cultural principles displayed as pill badges
+- **Useful Links** — company homepage and LinkedIn (deterministic, zero-token), plus URLs regex-extracted from the JD text
+
+**Deep research** (`/api/company-info-deep`)
+
+Triggered by clicking "Get More Info" (requires the company name to be confirmed in the Job Meta widget). Runs **5 fetches in parallel** — 2 Jina Reader pages and 3 Tavily searches — then feeds the combined content to Claude Haiku:
+
+| Source | What it fetches |
+|---|---|
+| Jina Reader — homepage | Company website (up to 8,000 chars) |
+| Jina Reader — `/about` | About page (up to 8,000 chars) |
+| Tavily search 1 | Products, services, company overview (`search_depth: advanced`) |
+| Tavily search 2 | Culture, interview process, remote work, benefits |
+| Tavily search 3 | Recent news, funding rounds, milestones (2024–2025) |
+
+Extracted and displayed fields:
+
+| Section | Description |
+|---|---|
+| Key Facts | Founding year, headcount, funding, HQ, notable customers (max 6) |
+| Products & Services | Main product lines and services (max 5) |
+| Tech Stack | Languages, frameworks, cloud platforms used (max 8) |
+| Work Environment | Remote/hybrid policy, perks, culture notes (max 4) |
+| Interview Insights | Interview process and hiring criteria if explicitly stated (max 4) |
+| Recent Highlights | News, launches, awards, funding rounds (max 5) |
+| Competitors | Main competitors in the same market (max 4, shown as orange badges) |
+| Additional Links | Engineering blog, press page, docs (max 3, deduped against homepage) |
+
+Tavily and Jina are both optional — the endpoint degrades gracefully if keys are missing or requests time out.
+
 ---
 
 ### Document Export
@@ -229,6 +297,24 @@ All exports use a two-column template matching a professional design:
 - Copy to clipboard (markdown bold stripped)
 - Download as PDF
 - Download as DOCX (Word-compatible)
+
+---
+
+### Save to Folder
+
+**Files:** `src/app/api/save-documents/route.ts`, `src/components/save-to-folder.tsx`, `src/lib/generate-jd-pdf.ts`
+
+When `ROOT_FOLDER` is set in `.env.local`, a "Save to Folder" button appears in the export toolbar. Clicking it sends base64-encoded PDFs to `/api/save-documents`, which writes them to a subfolder on disk:
+
+```
+$ROOT_FOLDER/
+  {company}-{job-title}/
+    {company}-{job-title}-cover-letter.pdf
+    {company}-{job-title}-resume.pdf
+    {company}-{job-title}-job-description.pdf
+```
+
+The job description is also rendered as a PDF (`generate-jd-pdf.ts`) and saved alongside the application documents for reference. The `ROOT_FOLDER` value supports `~` expansion.
 
 ---
 
@@ -303,7 +389,13 @@ End-to-end flows using mocked API routes: full generate flow, scrape-failure fal
 ## FAQ
 
 **What AI model is used?**
-Cover letter generation and resume curation use `claude-sonnet-4-5-20250929` via the `@ai-sdk/anthropic` package. Resume evaluation uses Claude with structured output (`generateObject` + Zod schema) to return a typed JSON result.
+Cover letter generation and resume curation use `claude-sonnet-4-5-20250929` via the `@ai-sdk/anthropic` package. Resume evaluation and Company Intelligence use `claude-haiku-4-5-20251001` with structured output (`generateObject` + Zod schema) to return typed JSON results.
+
+**What does Company Intelligence show?**
+After loading a job description, clicking "Research [Company]" extracts the company description, values, and links directly from the JD text using Claude Haiku — no external requests. Clicking "Get More Info" (requires the company name to be confirmed) runs a deeper scan: Jina Reader fetches the homepage and `/about` page, Tavily runs three targeted web searches (overview, culture/interview, recent news), and Claude Haiku extracts up to 8 structured fields including tech stack, competitors, interview insights, and recent highlights.
+
+**Do I need Tavily and Jina API keys?**
+No. Both are optional. Jina Reader works without a key (at lower rate limits). Tavily requires `TAVILY_API_KEY` — without it, deep research still runs using Jina Reader only. The endpoint returns an error only if both sources fail entirely.
 
 **How does hallucination prevention work?**
 Three layers work together:
