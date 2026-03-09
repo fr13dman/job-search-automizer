@@ -20,7 +20,7 @@ Before making any code changes, always provide a concise summary of what will be
 
 ## Architecture
 
-This is a **Next.js 16 App Router** application that generates tailored cover letters and curated resumes using Claude AI. Single-page app with five API routes.
+This is a **Next.js 16 App Router** application that generates tailored cover letters and curated resumes using Claude AI. Single-page app with six API routes.
 
 ### Data Flow
 
@@ -32,9 +32,11 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 
 **Resume Curation (agentic loop):**
 1. **`/api/curate-resume`** — Claude rewrites the resume tailored to the job, using `__curated text__` double-underscore markers around AI-added content
-2. **`/api/evaluate-resume`** — Claude scores the curated resume for ATS fit, keyword matches, hallucinations, etc., returning a `ResumeEvaluation` JSON object
-3. The client (`src/components/curated-resume.tsx`) runs up to 3 attempts: curate → evaluate → if score < threshold, curate again with feedback → repeat
-4. Final resume exports as PDF (`src/lib/generate-resume-pdf.ts`) or DOCX (`src/lib/generate-docx.ts`)
+2. Client calls `restoreProtectedFields()` (`src/lib/restore-protected-fields.ts`) — deterministically replaces the curated contact block and EDUCATION section with verbatim originals, before evaluation
+3. **`/api/evaluate-resume`** — Claude scores the curated resume for ATS fit, keyword matches, hallucinations, etc., returning a `ResumeEvaluation` JSON object; client also runs `checkNumericFidelity()` (`src/lib/check-numeric-fidelity.ts`) to catch changed metrics and merges findings into `hallucinationDetails`
+4. The client (`src/components/curated-resume.tsx`) runs up to 3 attempts: curate → restore → evaluate → if score < threshold, curate again with feedback → repeat
+5. Final resume exports as PDF (`src/lib/generate-resume-pdf.ts`) or DOCX (`src/lib/generate-resume-docx.ts`)
+6. **`/api/save-documents`** — saves base64-encoded PDFs to a local folder path (expanded from `ROOT_FOLDER` env var); also exports the JD as a PDF via `src/lib/generate-jd-pdf.ts`
 
 ### Key Conventions
 
@@ -43,6 +45,7 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 - **Bold formatting**: The AI outputs `**bold**` markdown for key achievements. This is rendered as highlighted `<mark>` tags in preview, rendered as bold in PDF, and stripped on clipboard copy.
 - **Curated markers**: The resume curation prompt uses `__curated text__` double-underscore markers. `stripCuratedMarkers` in `src/lib/clean-markdown.ts` strips them for PDF; `inlineBoldRuns` in `src/lib/generate-docx.ts` renders them as bold in DOCX.
 - **PDF metadata extraction**: `src/lib/extract-metadata.ts` uses regex patterns to pull candidate name, company name, and job title from the cover letter and job description to build the PDF filename and header. Filename formats: `{company}-{position}-cover-letter.{ext}` and `{company}-{position}-resume`.
+- **Hallucination hardening**: After each curation, `restoreProtectedFields()` (`src/lib/restore-protected-fields.ts`) deterministically replaces the contact block and EDUCATION section in the curated output with verbatim content from the original resume. `checkNumericFidelity()` (`src/lib/check-numeric-fidelity.ts`) extracts numeric tokens from the original (normalising K/M/B/MM, commas, `$`) and verifies all are present in the curated text; mismatches are merged into `hallucinationDetails` on the `ResumeEvaluation`. Both use `src/lib/extract-resume-sections.ts` to identify section boundaries.
 - **Types**: Shared types in `src/types/index.ts` — `Tone`, `ScrapeResult`, `ParseResumeResult`, `GenerateRequest`, `PdfMetadata`, `ResumeEvaluation`, `AttemptRecord`.
 - **UI components**: shadcn/ui primitives in `src/components/ui/`, app components directly in `src/components/`.
 
@@ -60,7 +63,10 @@ This is a **Next.js 16 App Router** application that generates tailored cover le
 
 ### Environment Variables
 
-- `ANTHROPIC_API_KEY` — required for `/api/generate`, `/api/curate-resume`, and `/api/evaluate-resume` (used by `@ai-sdk/anthropic`)
+- `ANTHROPIC_API_KEY` — required for `/api/generate`, `/api/curate-resume`, `/api/evaluate-resume`, `/api/company-info`, and `/api/company-info-deep` (used by `@ai-sdk/anthropic`)
+- `ROOT_FOLDER` — optional; default save-to-disk root directory surfaced by `GET /api/save-documents` and used as the base path for the "Save to folder" feature (supports `~` expansion)
+- `TAVILY_API_KEY` — optional; enables web search in `/api/company-info-deep` (Tavily AI search API). Without this key the deep research endpoint falls back to Jina Reader only.
+- `JINA_API_KEY` — optional; increases Jina Reader rate limits in `/api/company-info-deep`. The endpoint works without it at lower throughput.
 
 ## Vercel Deployment
 

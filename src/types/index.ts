@@ -68,3 +68,10 @@ export interface CompanyInfo {
   values: string[];
   links: CompanyLink[];
 }
+
+export interface CompanyDeepInfo {
+  keyFacts: string[];
+  techStack: string[];
+  recentHighlights: string[];
+  additionalLinks: CompanyLink[];
+}
