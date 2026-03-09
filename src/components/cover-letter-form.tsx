@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useCompletion } from "@ai-sdk/react";
+import { RotateCcw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -133,6 +134,93 @@ export function CoverLetterForm() {
     },
   });
 
+  async function runCurationLoop(
+    controller: AbortController
+  ): Promise<{ curated: string; lastEvaluation: ResumeEvaluationType | null }> {
+    let currentCurated = "";
+    let lastEvaluation: ResumeEvaluationType | null = null;
+    let lastFeedback: string | undefined;
+
+    for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+      if (controller.signal.aborted) break;
+
+      setCurrentAttempt(attempt);
+      setResumePhase("curating");
+
+      const curated = await completeCurateResume("", {
+        body: { resumeText, jobDescription, evaluationFeedback: lastFeedback },
+      });
+
+      if (controller.signal.aborted) break;
+
+      currentCurated = curated ?? "";
+      if (!currentCurated) break;
+
+      // Deterministically restore name/contact and EDUCATION before evaluation
+      const { text: restoredText, restorations } = restoreProtectedFields(currentCurated, resumeText);
+      if (restorations.length > 0) {
+        console.log(`[CoverLetterForm] Restored ${restorations.length} protected fields:`, restorations);
+      }
+      currentCurated = restoredText;
+
+      setResumePhase("evaluating");
+
+      let evaluation: ResumeEvaluationType | null = null;
+      let passed = false;
+      let evaluationError: string | undefined;
+
+      try {
+        const res = await fetch("/api/evaluate-resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resumeText, jobDescription, curatedResume: currentCurated }),
+          signal: controller.signal,
+        });
+
+        if (res.ok) {
+          evaluation = await res.json();
+          lastEvaluation = evaluation;
+          passed = !evaluation!.hallucinationsFound;
+          console.log(
+            `[CoverLetterForm] Evaluation attempt ${attempt}: atsScore=${evaluation!.atsScore}, hallucinationsFound=${evaluation!.hallucinationsFound}`
+          );
+          if (!controller.signal.aborted && passed) {
+            toast.success("Resume curated!");
+            const { fireConfetti } = await import("@/lib/confetti");
+            fireConfetti("resume");
+          }
+        } else {
+          let details: string | undefined;
+          try {
+            const errBody = await res.json();
+            details = errBody.details as string | undefined;
+          } catch {
+            // ignore JSON parse failure
+          }
+          evaluationError = details ?? `Evaluation service returned HTTP ${res.status}.`;
+          console.warn(`[CoverLetterForm] Evaluation returned ${res.status} on attempt ${attempt}`, { details });
+        }
+      } catch (err) {
+        if (controller.signal.aborted) break;
+        evaluationError = `Evaluation service encountered an error: ${err instanceof Error ? err.message : String(err)}`;
+        console.warn(`[CoverLetterForm] Evaluation threw on attempt ${attempt}:`, err);
+      }
+
+      setAttemptHistory((prev) => [...prev, { attempt, evaluation, passed, evaluationError }]);
+
+      if (passed || attempt === MAX_GENERATION_ATTEMPTS) break;
+
+      if (evaluation) {
+        lastFeedback = buildEvaluationFeedback(evaluation, resumeText);
+        console.log(`[CoverLetterForm] Hallucinations detected, retrying with feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);
+      } else {
+        console.log(`[CoverLetterForm] Evaluation error, retrying without feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);
+      }
+    }
+
+    return { curated: currentCurated, lastEvaluation };
+  }
+
   async function handleGenerate() {
     if (!jobDescription || !resumeText) return;
     console.log("[CoverLetterForm] Starting generation", {
@@ -170,99 +258,9 @@ export function CoverLetterForm() {
       }
 
       if (generateCuratedResume) {
-        let lastFeedback: string | undefined;
-
-        for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
-          if (controller.signal.aborted) break;
-
-          setCurrentAttempt(attempt);
-          setResumePhase("curating");
-
-          const curated = await completeCurateResume("", {
-            body: {
-              resumeText,
-              jobDescription,
-              evaluationFeedback: lastFeedback,
-            },
-          });
-
-          if (controller.signal.aborted) break;
-
-          currentCurated = curated ?? "";
-          if (!currentCurated) break;
-
-          // Deterministically restore name/contact and EDUCATION before evaluation
-          const { text: restoredText, restorations } = restoreProtectedFields(
-            currentCurated,
-            resumeText
-          );
-          if (restorations.length > 0) {
-            console.log(
-              `[CoverLetterForm] Restored ${restorations.length} protected fields:`,
-              restorations
-            );
-          }
-          currentCurated = restoredText;
-
-          setResumePhase("evaluating");
-
-          let evaluation: ResumeEvaluationType | null = null;
-          let passed = false;
-          let evaluationError: string | undefined;
-
-          try {
-            const res = await fetch("/api/evaluate-resume", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ resumeText, jobDescription, curatedResume: currentCurated }),
-              signal: controller.signal,
-            });
-
-            if (res.ok) {
-              evaluation = await res.json();
-              lastEvaluation = evaluation;
-              passed = !evaluation!.hallucinationsFound;
-              console.log(
-                `[CoverLetterForm] Evaluation attempt ${attempt}: atsScore=${evaluation!.atsScore}, hallucinationsFound=${evaluation!.hallucinationsFound}`
-              );
-              if (!controller.signal.aborted && passed) {
-                toast.success("Resume curated!");
-                const { fireConfetti } = await import("@/lib/confetti");
-                fireConfetti("resume");
-              }
-            } else {
-              let details: string | undefined;
-              try {
-                const errBody = await res.json();
-                details = errBody.details as string | undefined;
-              } catch {
-                // ignore JSON parse failure
-              }
-              evaluationError = details ?? `Evaluation service returned HTTP ${res.status}.`;
-              console.warn(`[CoverLetterForm] Evaluation returned ${res.status} on attempt ${attempt}`, { details });
-            }
-          } catch (err) {
-            if (controller.signal.aborted) break;
-            evaluationError = `Evaluation service encountered an error: ${err instanceof Error ? err.message : String(err)}`;
-            console.warn(`[CoverLetterForm] Evaluation threw on attempt ${attempt}:`, err);
-          }
-
-          // Record this attempt's result in history
-          setAttemptHistory((prev) => [
-            ...prev,
-            { attempt, evaluation, passed, evaluationError },
-          ]);
-
-          if (passed || attempt === MAX_GENERATION_ATTEMPTS) break;
-
-          // Build feedback for the next attempt from the failed evaluation
-          if (evaluation) {
-            lastFeedback = buildEvaluationFeedback(evaluation, resumeText);
-            console.log(`[CoverLetterForm] Hallucinations detected, retrying with feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);
-          } else {
-            console.log(`[CoverLetterForm] Evaluation error, retrying without feedback (attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS})`);
-          }
-        }
+        const result = await runCurationLoop(controller);
+        currentCurated = result.curated;
+        lastEvaluation = result.lastEvaluation;
       }
     } catch (err) {
       console.warn("[CoverLetterForm] handleGenerate threw:", err);
@@ -277,13 +275,51 @@ export function CoverLetterForm() {
     }
   }
 
+  async function handleRetryCoverLetter() {
+    if (!jobDescription || !resumeText || isCoverLetterBusy) return;
+    stopCoverLetter();
+    setOutputText("");
+    complete("", {
+      body: { resumeText, jobDescription, tone, additionalInstructions: additionalInstructions || undefined },
+    }).catch(() => {});
+  }
+
+  async function handleRetryResume() {
+    if (!jobDescription || !resumeText || isResumeBusy) return;
+    abortControllerRef.current?.abort();
+    stopCurateResume();
+    setEvaluationResult(null);
+    setFinalCuratedResume("");
+    setResumePhase("idle");
+    setCurrentAttempt(0);
+    setAttemptHistory([]);
+    setIsCancelling(false);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const { curated, lastEvaluation } = await runCurationLoop(controller);
+      setEvaluationResult(lastEvaluation);
+      setFinalCuratedResume(curated);
+    } catch (err) {
+      console.warn("[CoverLetterForm] handleRetryResume threw:", err);
+    } finally {
+      setResumePhase("done");
+      setIsCancelling(false);
+      abortControllerRef.current = null;
+    }
+  }
+
   function handleCancel() {
     setIsCancelling(true);
     abortControllerRef.current?.abort();
     stopCurateResume();
   }
 
-  const isBusy = isLoading || curatedResumeLoading || resumePhase === "curating" || resumePhase === "evaluating";
+  const isCoverLetterBusy = isLoading;
+  const isResumeBusy = curatedResumeLoading || resumePhase === "curating" || resumePhase === "evaluating";
+  const isBusy = isCoverLetterBusy || isResumeBusy;
   const canGenerate = !!jobDescription && !!resumeText && !isBusy && (generateCoverLetter || generateCuratedResume);
 
   return (
@@ -392,13 +428,27 @@ export function CoverLetterForm() {
           <CardHeader className="bg-gradient-to-r from-slate-50 to-teal-50/60 dark:from-slate-800/50 dark:to-teal-950/30 rounded-t-[calc(var(--radius-lg)-1px)]">
             <div className="flex items-center justify-between">
               <CardTitle className="text-slate-700 dark:text-slate-200">Cover Letter</CardTitle>
-              <ExportToolbar
-                text={outputText || completion}
-                jobDescription={jobDescription}
-                resumeText={resumeText}
-                isLoading={isLoading}
-                metaOverrides={jobMeta}
-              />
+              <div className="flex items-center gap-1">
+                {(completion || outputText) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleRetryCoverLetter}
+                    disabled={isCoverLetterBusy}
+                    aria-label="Regenerate"
+                    title="Regenerate cover letter"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                )}
+                <ExportToolbar
+                  text={outputText || completion}
+                  jobDescription={jobDescription}
+                  resumeText={resumeText}
+                  isLoading={isLoading}
+                  metaOverrides={jobMeta}
+                />
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-6">
@@ -414,7 +464,21 @@ export function CoverLetterForm() {
       {/* ── Row 2: Resume Curator / Evaluator — full width ── */}
       {generateCuratedResume && <Card className="border-t-4 border-t-indigo-500/70 shadow-sm">
         <CardHeader className="bg-gradient-to-r from-slate-50 to-indigo-50/60 dark:from-slate-800/50 dark:to-indigo-950/30 rounded-t-[calc(var(--radius-lg)-1px)]">
-          <CardTitle className="text-slate-700 dark:text-slate-200">Resume Curator</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-slate-700 dark:text-slate-200">Resume Curator</CardTitle>
+            {resumePhase !== "idle" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRetryResume}
+                disabled={isResumeBusy}
+                aria-label="Retry resume curation"
+                title="Re-curate resume"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
           {/* Generation progress */}
