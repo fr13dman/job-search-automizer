@@ -17,6 +17,7 @@ import { ResumeEvaluation } from "@/components/resume-evaluation";
 import { ResumeProgress, type ResumePhase } from "@/components/resume-progress";
 import { ExportToolbar } from "@/components/export-toolbar";
 import { SaveToFolder } from "@/components/save-to-folder";
+import { CompanyInfoCard } from "@/components/company-info-card";
 import { toast } from "sonner";
 import type { Tone, ResumeEvaluation as ResumeEvaluationType, AttemptRecord } from "@/types";
 import { restoreProtectedFields } from "@/lib/restore-protected-fields";
@@ -511,6 +512,15 @@ export function CoverLetterForm() {
           />
         </CardContent>
       </Card>}
+
+      {/* Company Intelligence */}
+      {jobDescription && (
+        <CompanyInfoCard
+          jobDescription={jobDescription}
+          companyName={jobMeta.companyName || undefined}
+          sourceUrl={sourceUrl || undefined}
+        />
+      )}
     </div>
   );
 }

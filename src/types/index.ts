@@ -56,3 +56,26 @@ export interface AttemptRecord {
   passed: boolean;
   evaluationError?: string;
 }
+
+export interface CompanyLink {
+  label: string;
+  url: string;
+  sourced: "extracted" | "inferred";
+}
+
+export interface CompanyInfo {
+  description: string;
+  values: string[];
+  links: CompanyLink[];
+}
+
+export interface CompanyDeepInfo {
+  keyFacts: string[];
+  productsServices: string[];
+  techStack: string[];
+  workEnvironment: string[];
+  interviewInsights: string[];
+  recentHighlights: string[];
+  competitors: string[];
+  additionalLinks: CompanyLink[];
+}
