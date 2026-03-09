@@ -4,26 +4,36 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FileDown, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { buildResumeFilename } from "@/lib/extract-metadata";
+import { buildResumeFilename, extractJobMeta } from "@/lib/extract-metadata";
 import { stripNonBoldMarkdown } from "@/lib/clean-markdown";
 
 interface CuratedResumeProps {
   completion: string;
   isLoading: boolean;
   jobDescription?: string;
+  metaOverrides?: { companyName?: string; jobTitle?: string };
 }
 
-export function CuratedResume({ completion, isLoading, jobDescription = "" }: CuratedResumeProps) {
+export function CuratedResume({ completion, isLoading, jobDescription = "", metaOverrides }: CuratedResumeProps) {
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const isAnyDownloading = isDownloadingDocx || isDownloadingPdf;
 
+  function buildMeta() {
+    const base = extractJobMeta(jobDescription);
+    return {
+      ...base,
+      ...(metaOverrides?.companyName ? { companyName: metaOverrides.companyName } : {}),
+      ...(metaOverrides?.jobTitle ? { jobTitle: metaOverrides.jobTitle } : {}),
+    };
+  }
+
   async function handleDownloadDocx() {
     setIsDownloadingDocx(true);
     try {
       const { downloadResumeDocx } = await import("@/lib/generate-resume-docx");
-      const filename = buildResumeFilename(completion, jobDescription);
+      const filename = buildResumeFilename(buildMeta());
       await downloadResumeDocx(completion, `${filename}.docx`);
       toast.success("Resume downloaded as DOCX!");
     } catch (err) {
@@ -38,7 +48,7 @@ export function CuratedResume({ completion, isLoading, jobDescription = "" }: Cu
     setIsDownloadingPdf(true);
     try {
       const { downloadResumePdf } = await import("@/lib/generate-resume-pdf");
-      const filename = buildResumeFilename(completion, jobDescription);
+      const filename = buildResumeFilename(buildMeta());
       await downloadResumePdf(completion, `${filename}.pdf`);
       toast.success("Resume downloaded as PDF!");
     } catch (err) {

@@ -443,6 +443,7 @@ export function CoverLetterForm() {
             completion={finalCuratedResume}
             isLoading={curatedResumeLoading || resumePhase === "curating" || resumePhase === "evaluating"}
             jobDescription={jobDescription}
+            metaOverrides={jobMeta}
           />
         </CardContent>
       </Card>}

@@ -214,18 +214,15 @@ function slugify(s: string): string {
  */
 const MAX_FILENAME_LENGTH = 45;
 
-export function buildResumeFilename(_resumeText: string, jobDescription: string): string {
-  const companyName = extractCompanyName("", jobDescription);
-  const jobTitle = extractJobTitle("", jobDescription);
-
+export function buildResumeFilename(metadata: PdfMetadata): string {
   const parts: string[] = [];
-  if (companyName) parts.push(slugify(companyName));
-  if (jobTitle) parts.push(slugify(jobTitle));
+  if (metadata.companyName) parts.push(slugify(metadata.companyName));
+  if (metadata.jobTitle) parts.push(slugify(metadata.jobTitle));
   parts.push("resume");
 
   const full = parts.join("-");
-  if (full.length > MAX_FILENAME_LENGTH && companyName) {
-    return `${slugify(companyName)}-resume`;
+  if (full.length > MAX_FILENAME_LENGTH && metadata.companyName) {
+    return `${slugify(metadata.companyName)}-resume`;
   }
   return full;
 }
