@@ -71,7 +71,11 @@ export interface CompanyInfo {
 
 export interface CompanyDeepInfo {
   keyFacts: string[];
+  productsServices: string[];
   techStack: string[];
+  workEnvironment: string[];
+  interviewInsights: string[];
   recentHighlights: string[];
+  competitors: string[];
   additionalLinks: CompanyLink[];
 }

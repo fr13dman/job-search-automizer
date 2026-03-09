@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, ExternalLink, Loader2, RotateCcw, Sparkles, Cpu, Newspaper, Info } from "lucide-react";
+import { Building2, ExternalLink, Loader2, RotateCcw, Sparkles, Cpu, Newspaper, Info, Briefcase, Users, MessageSquare, Trophy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -214,6 +214,23 @@ export function CompanyInfoCard({
                   </div>
                 )}
 
+                {deepInfo.productsServices.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <Briefcase className="h-3 w-3" />
+                      Products & Services
+                    </h3>
+                    <ul className="space-y-1">
+                      {deepInfo.productsServices.map((item, i) => (
+                        <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {deepInfo.techStack.length > 0 && (
                   <div className="space-y-2">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -233,6 +250,40 @@ export function CompanyInfoCard({
                   </div>
                 )}
 
+                {deepInfo.workEnvironment.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <Users className="h-3 w-3" />
+                      Work Environment
+                    </h3>
+                    <ul className="space-y-1">
+                      {deepInfo.workEnvironment.map((item, i) => (
+                        <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {deepInfo.interviewInsights.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <MessageSquare className="h-3 w-3" />
+                      Interview Insights
+                    </h3>
+                    <ul className="space-y-1">
+                      {deepInfo.interviewInsights.map((item, i) => (
+                        <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {deepInfo.recentHighlights.length > 0 && (
                   <div className="space-y-2">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -247,6 +298,25 @@ export function CompanyInfoCard({
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {deepInfo.competitors.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <Trophy className="h-3 w-3" />
+                      Competitors
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {deepInfo.competitors.map((competitor, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center rounded-md bg-orange-50 dark:bg-orange-950/30 px-2.5 py-1 text-xs font-medium text-orange-700 dark:text-orange-300 ring-1 ring-orange-200 dark:ring-orange-800"
+                        >
+                          {competitor}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -284,16 +354,23 @@ export function CompanyInfoCard({
                 </div>
               ) : (
                 !deepInfo && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={fetchDeepInfo}
-                    disabled={!companyName}
-                    className="gap-2 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800 hover:bg-violet-50 dark:hover:bg-violet-950/40"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Get More Info
-                  </Button>
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchDeepInfo}
+                      disabled={!companyName}
+                      className="gap-2 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800 hover:bg-violet-50 dark:hover:bg-violet-950/40 self-start"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Get More Info
+                    </Button>
+                    {!companyName && (
+                      <p className="text-xs text-muted-foreground">
+                        Confirm the job details above to enable deep research.
+                      </p>
+                    )}
+                  </div>
                 )
               )}
             </div>
