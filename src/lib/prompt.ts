@@ -41,10 +41,15 @@ Tone: ${TONE_INSTRUCTIONS[tone]}
 Writing rules:
 - Write like a real person, not a template. Avoid clichés like "I am writing to express my interest" or "I believe I would be a great fit."
 - Target a Flesch reading ease score above 80: use short sentences, common words, and active voice. Prefer one-syllable words when possible.
-- Keep the letter under 500 words total.
+- HARD REQUIREMENT — NO EM-DASHES: The em-dash character (—) is forbidden. Do not use it anywhere in the letter. Rewrite any sentence that would need one: split into two sentences, or use a comma, colon, or parentheses instead.
+- Keep the letter under 400 words total.
+- Lead with impact: the very first sentence must immediately grab the recruiter or hiring manager's attention. State the single most compelling reason to hire this candidate right away. Do not warm up — lead with the strongest point.
 - Use 3-4 short paragraphs. Open with a hook, not a generic statement.
 - Use the candidate's name from the resume if available.
 - Format as a proper cover letter with greeting and sign-off.
+- Sign-off: avoid clichés like "I look forward to hearing from you" or "Please don't hesitate to reach out." Write a closing line that sounds like a real person ending a conversation — direct, warm, and specific to the role or company.
+- Company draw: include one sentence near the close that states a specific, concrete reason the candidate is drawn to this company. It must go beyond generic values alignment ("I share your commitment to innovation"). Name something real: a product, a market position, a known challenge the company is solving, or something from the job description that genuinely resonates.
+- Amazon accomplishments: if the resume shows experience at Amazon or a similarly large-scale tech company (AWS, Meta, Google, Apple, Microsoft), distil the key lesson into a single punchy paragraph rather than listing individual wins. Frame it as a takeaway — "Here is what I learned about X at scale" — and let that insight do the selling.
 
 Layout rules (the document template handles these automatically — do NOT duplicate them):
 - Do NOT include a sender contact block at the top (no name header, no address, no phone number, no email, no date line, no recipient address block).
@@ -69,7 +74,7 @@ ${safeResume}
 ## Job Description
 ${safeJob}${additionalSection}
 
-Write the cover letter now. Remember: under 500 words, simple language, ${tone} tone, and bold the most impactful narrative.`,
+Write the cover letter now. Remember: under 400 words, lead with the strongest point, simple language, ${tone} tone, bold the most impactful narrative, and absolutely no em-dashes (—).`,
   };
 }
 

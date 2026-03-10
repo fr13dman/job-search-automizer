@@ -57,6 +57,13 @@ export interface AttemptRecord {
   evaluationError?: string;
 }
 
+export interface CoverLetterEvaluation {
+  humanScore: number;
+  verdict: "Looks Human" | "Borderline" | "Likely AI";
+  aiSignals: string[];
+  suggestions: string[];
+}
+
 export interface CompanyLink {
   label: string;
   url: string;

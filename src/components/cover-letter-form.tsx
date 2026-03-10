@@ -12,6 +12,7 @@ import { JobInput, type JobMeta } from "@/components/job-input";
 import { ResumeUpload } from "@/components/resume-upload";
 import { ToneSelector } from "@/components/tone-selector";
 import { CoverLetterOutput } from "@/components/cover-letter-output";
+import { CoverLetterEvaluationPanel } from "@/components/cover-letter-evaluation";
 import { CuratedResume } from "@/components/curated-resume";
 import { ResumeEvaluation } from "@/components/resume-evaluation";
 import { ResumeProgress, type ResumePhase } from "@/components/resume-progress";
@@ -19,7 +20,7 @@ import { ExportToolbar } from "@/components/export-toolbar";
 import { SaveToFolder } from "@/components/save-to-folder";
 import { CompanyInfoCard } from "@/components/company-info-card";
 import { toast } from "sonner";
-import type { Tone, ResumeEvaluation as ResumeEvaluationType, AttemptRecord } from "@/types";
+import type { Tone, ResumeEvaluation as ResumeEvaluationType, AttemptRecord, CoverLetterEvaluation } from "@/types";
 import { restoreProtectedFields } from "@/lib/restore-protected-fields";
 import { extractResumeSections } from "@/lib/extract-resume-sections";
 
@@ -103,6 +104,10 @@ export function CoverLetterForm() {
   const [generateCuratedResume, setGenerateCuratedResume] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [clEvaluation, setClEvaluation] = useState<CoverLetterEvaluation | null>(null);
+  const [clEvaluationError, setClEvaluationError] = useState<string | null>(null);
+  const [isEvaluatingCL, setIsEvaluatingCL] = useState(false);
+  const evaluatedCompletionRef = useRef<string>("");
 
   const { completion, isLoading, complete, stop: stopCoverLetter, error } = useCompletion({
     api: "/api/generate",
@@ -134,6 +139,30 @@ export function CoverLetterForm() {
       }
     },
   });
+
+  // Trigger AI detection evaluation once streaming finishes
+  useEffect(() => {
+    if (isLoading || !completion || completion === evaluatedCompletionRef.current) return;
+    evaluatedCompletionRef.current = completion;
+    setClEvaluation(null);
+    setClEvaluationError(null);
+    setIsEvaluatingCL(true);
+    fetch("/api/evaluate-cover-letter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coverLetterText: completion }),
+    })
+      .then((res) => res.json().then((data) => {
+        if (!res.ok) throw new Error(data.error ?? `Server returned ${res.status}`);
+        return data;
+      }))
+      .then((data) => setClEvaluation(data))
+      .catch((err) => {
+        console.error("[CoverLetterForm] AI evaluation failed:", err);
+        setClEvaluationError(err instanceof Error ? err.message : "Unknown error");
+      })
+      .finally(() => setIsEvaluatingCL(false));
+  }, [isLoading, completion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runCurationLoop(
     controller: AbortController
@@ -280,6 +309,10 @@ export function CoverLetterForm() {
     if (!jobDescription || !resumeText || isCoverLetterBusy) return;
     stopCoverLetter();
     setOutputText("");
+    setClEvaluation(null);
+    setClEvaluationError(null);
+    setIsEvaluatingCL(false);
+    evaluatedCompletionRef.current = "";
     complete("", {
       body: { resumeText, jobDescription, tone, additionalInstructions: additionalInstructions || undefined },
     }).catch(() => {});
@@ -457,6 +490,11 @@ export function CoverLetterForm() {
               completion={completion}
               isLoading={isLoading}
               onTextChange={setOutputText}
+            />
+            <CoverLetterEvaluationPanel
+              evaluation={clEvaluation}
+              isLoading={isEvaluatingCL}
+              error={clEvaluationError}
             />
           </CardContent>
         </Card>}
