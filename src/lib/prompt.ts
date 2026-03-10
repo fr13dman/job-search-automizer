@@ -41,7 +41,9 @@ Tone: ${TONE_INSTRUCTIONS[tone]}
 Writing rules:
 - Write like a real person, not a template. Avoid clichés like "I am writing to express my interest" or "I believe I would be a great fit."
 - Target a Flesch reading ease score above 80: use short sentences, common words, and active voice. Prefer one-syllable words when possible.
-- Keep the letter under 500 words total.
+- HARD REQUIREMENT — NO EM-DASHES: The em-dash character (—) is forbidden. Do not use it anywhere in the letter. Rewrite any sentence that would need one: split into two sentences, or use a comma, colon, or parentheses instead.
+- Keep the letter under 400 words total.
+- Lead with impact: the very first sentence must immediately grab the recruiter or hiring manager's attention. State the single most compelling reason to hire this candidate right away. Do not warm up — lead with the strongest point.
 - Use 3-4 short paragraphs. Open with a hook, not a generic statement.
 - Use the candidate's name from the resume if available.
 - Format as a proper cover letter with greeting and sign-off.
@@ -69,7 +71,7 @@ ${safeResume}
 ## Job Description
 ${safeJob}${additionalSection}
 
-Write the cover letter now. Remember: under 500 words, simple language, ${tone} tone, and bold the most impactful narrative.`,
+Write the cover letter now. Remember: under 400 words, lead with the strongest point, simple language, ${tone} tone, bold the most impactful narrative, and absolutely no em-dashes (—).`,
   };
 }
 
